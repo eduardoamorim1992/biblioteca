@@ -1,0 +1,10 @@
+# configurações locais do Claude Code
+.claude/
+
+# backups exportados pelo app
+biblioteca-*.json
+
+# lixo do sistema
+Thumbs.db
+desktop.ini
+.DS_Store

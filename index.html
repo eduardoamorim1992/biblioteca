@@ -1,0 +1,1441 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Biblioteca — sistema de leitura</title>
+<style>
+/* ---------- tokens ---------- */
+:root{
+  color-scheme: light;
+  --bg:#f9f9f7; --surface:#fcfcfb; --surface-2:#f2f1ed;
+  --text:#0b0b0b; --text-2:#52514e; --muted:#898781;
+  --grid:#e1e0d9; --axis:#c3c2b7; --border:rgba(11,11,11,.10);
+  --accent:#2a78d6; --accent-soft:rgba(42,120,214,.10);
+  --good:#0ca30c; --good-text:#006300; --warning:#fab219; --critical:#d03b3b;
+  --heat-0:#eceae4; --heat-1:#cde2fb; --heat-2:#9ec5f4; --heat-3:#5598e7; --heat-4:#2a78d6; --heat-5:#184f95;
+  --radius:14px;
+  --shadow:0 1px 2px rgba(11,11,11,.04), 0 8px 24px rgba(11,11,11,.05);
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --bg:#0d0d0d; --surface:#1a1a19; --surface-2:#232322;
+  --text:#ffffff; --text-2:#c3c2b7; --muted:#898781;
+  --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10);
+  --accent:#3987e5; --accent-soft:rgba(57,135,229,.14);
+  --good:#0ca30c; --good-text:#0ca30c; --warning:#fab219; --critical:#d03b3b;
+  --heat-0:#232322; --heat-1:#0d366b; --heat-2:#184f95; --heat-3:#256abf; --heat-4:#3987e5; --heat-5:#6da7ec;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--text);
+  font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.01em}
+h2{font-size:17px}
+h3{font-size:14px}
+p{margin:0}
+button,input,select,textarea{font:inherit;color:inherit}
+a{color:var(--accent)}
+
+.wrap{max-width:1080px;margin:0 auto;padding:0 20px 64px}
+
+/* ---------- header ---------- */
+header{
+  position:sticky;top:0;z-index:30;
+  background:color-mix(in srgb,var(--bg) 88%,transparent);
+  backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--border);
+}
+.head-in{max-width:1080px;margin:0 auto;padding:14px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;font-weight:680;font-size:16px;letter-spacing:-.02em}
+.brand .dot{width:10px;height:10px;border-radius:3px;background:var(--accent)}
+.head-spacer{flex:1}
+.streak-pill{
+  display:flex;align-items:center;gap:7px;padding:6px 12px;border-radius:999px;
+  background:var(--surface);border:1px solid var(--border);font-size:13px;color:var(--text-2);
+}
+.streak-pill b{color:var(--text);font-weight:650}
+
+nav.tabs{display:flex;gap:4px;overflow-x:auto;padding:0 20px;max-width:1080px;margin:0 auto;scrollbar-width:none}
+nav.tabs::-webkit-scrollbar{display:none}
+.tab{
+  appearance:none;background:none;border:0;border-bottom:2px solid transparent;
+  padding:11px 12px;cursor:pointer;color:var(--text-2);font-size:14px;font-weight:550;white-space:nowrap;
+}
+.tab:hover{color:var(--text)}
+.tab[aria-selected="true"]{color:var(--text);border-bottom-color:var(--accent)}
+
+/* ---------- primitives ---------- */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow)}
+.card + .card{margin-top:16px}
+.card-head{display:flex;align-items:baseline;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.card-head .sub{font-size:12.5px;color:var(--muted)}
+.grid{display:grid;gap:16px}
+.g2{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+.g3{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.field{display:flex;flex-direction:column;gap:5px;min-width:0}
+.field.grow{flex:1 1 160px}
+label{font-size:12px;color:var(--muted);font-weight:550}
+input,select,textarea{
+  background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:9px 11px;
+  width:100%;outline:none;transition:border-color .12s,box-shadow .12s;
+}
+:root[data-theme="dark"] input,:root[data-theme="dark"] select,:root[data-theme="dark"] textarea{background:var(--surface-2)}
+input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+textarea{resize:vertical;min-height:74px;line-height:1.55}
+.btn{
+  appearance:none;border:1px solid var(--border);background:var(--surface);color:var(--text);
+  padding:9px 15px;border-radius:9px;cursor:pointer;font-weight:600;font-size:14px;
+  transition:background .12s,border-color .12s,transform .06s;white-space:nowrap;
+}
+.btn:hover{background:var(--surface-2)}
+.btn:active{transform:translateY(1px)}
+.btn.primary{background:var(--accent);border-color:transparent;color:#fff}
+.btn.primary:hover{filter:brightness(1.07)}
+.btn.ghost{background:transparent}
+.btn.sm{padding:5px 10px;font-size:12.5px;font-weight:550;border-radius:7px}
+.btn.danger:hover{color:var(--critical);border-color:var(--critical)}
+.icon-btn{appearance:none;background:none;border:0;cursor:pointer;color:var(--muted);padding:4px;border-radius:6px;line-height:1}
+.icon-btn:hover{color:var(--text);background:var(--surface-2)}
+.hint{font-size:12px;color:var(--muted)}
+.empty{padding:26px 18px;text-align:center;color:var(--muted);font-size:14px;border:1px dashed var(--border);border-radius:12px}
+
+.chip{
+  display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;
+  font-size:11.5px;font-weight:600;border:1px solid var(--border);color:var(--text-2);background:var(--surface-2);
+}
+.chip .bullet{width:7px;height:7px;border-radius:50%}
+.chip[data-s="lendo"] .bullet{background:var(--accent)}
+.chip[data-s="fila"] .bullet{background:var(--muted)}
+.chip[data-s="lido"] .bullet{background:var(--good)}
+.chip[data-s="abandonado"] .bullet{background:var(--critical)}
+
+/* ---------- hoje ---------- */
+.today{display:grid;grid-template-columns:auto 1fr;gap:22px;align-items:center}
+@media(max-width:560px){.today{grid-template-columns:1fr;justify-items:center;text-align:center}}
+.ring{position:relative;width:132px;height:132px;flex:none}
+.ring svg{transform:rotate(-90deg)}
+.ring .val{
+  position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;
+}
+.ring .val .n{font-size:34px;font-weight:680;letter-spacing:-.03em;line-height:1}
+.ring .val .l{font-size:11.5px;color:var(--muted);margin-top:3px}
+.today-meta{display:flex;flex-direction:column;gap:10px;min-width:0}
+.today-meta .big{font-size:19px;font-weight:620;letter-spacing:-.02em}
+.mini-stats{display:flex;gap:20px;flex-wrap:wrap}
+.mini-stats div{display:flex;flex-direction:column}
+.mini-stats .n{font-size:19px;font-weight:640;letter-spacing:-.02em}
+.mini-stats .l{font-size:11.5px;color:var(--muted)}
+
+/* ---------- book cards ---------- */
+.books{display:grid;gap:12px}
+.book{
+  display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:start;
+  padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--surface);
+}
+.thumb{
+  width:46px;height:68px;border-radius:5px;overflow:hidden;flex:none;
+  display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,.18);
+}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.thumb span{color:#fff;font-weight:750;font-size:20px;opacity:.92}
+.synopsis{
+  font-size:12.5px;color:var(--text-2);line-height:1.5;margin-top:8px;
+  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;
+}
+
+/* busca na Open Library */
+.lookup{position:relative;flex:1 1 100%}
+.results{
+  position:absolute;top:100%;left:0;right:0;z-index:50;margin-top:6px;padding:4px;
+  background:var(--surface);border:1px solid var(--border);border-radius:11px;box-shadow:var(--shadow);
+  max-height:330px;overflow:auto;
+}
+.res{
+  display:flex;gap:11px;align-items:center;width:100%;text-align:left;
+  padding:8px;border:0;border-radius:8px;background:none;cursor:pointer;
+}
+.res:hover,.res:focus-visible{background:var(--surface-2);outline:none}
+.res img,.res .nocover{width:32px;height:46px;border-radius:3px;flex:none;object-fit:cover;background:var(--surface-2);display:block}
+.res .t{display:block;font-size:13.5px;font-weight:580;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.res .s{display:block;font-size:12px;color:var(--muted);margin-top:2px}
+.res-msg{padding:12px;font-size:13px;color:var(--muted)}
+
+/* escolher capa */
+.cover-pick{display:flex;gap:10px;align-items:flex-start}
+.cover-pick .thumb{width:44px;height:64px;background:var(--surface-2);border:1px dashed var(--border)}
+.cover-pick .thumb span{color:var(--muted);font-size:17px}
+.cover-pick .btns{display:flex;flex-direction:column;gap:5px}
+.book .t{font-weight:620;letter-spacing:-.01em;line-height:1.3}
+.book .a{font-size:12.5px;color:var(--muted);margin-top:2px}
+.book .acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+@media(max-width:560px){.book{grid-template-columns:auto 1fr}.book .acts{grid-column:1/-1;justify-content:flex-start}}
+.bar{height:7px;border-radius:99px;background:var(--surface-2);overflow:hidden;margin-top:10px}
+.bar > i{display:block;height:100%;border-radius:99px;background:var(--accent)}
+.book-foot{display:flex;gap:14px;flex-wrap:wrap;margin-top:7px;font-size:12px;color:var(--muted)}
+.book-foot b{color:var(--text-2);font-weight:600}
+
+/* ---------- lists ---------- */
+.list{display:flex;flex-direction:column;gap:2px}
+.item{
+  display:flex;gap:12px;align-items:center;padding:10px 12px;border-radius:10px;
+}
+.item:hover{background:var(--surface-2)}
+.item .grow{flex:1;min-width:0}
+.item .ttl{font-size:14px;font-weight:560;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .sub{font-size:12px;color:var(--muted)}
+.item .num{font-variant-numeric:tabular-nums;font-size:13px;color:var(--text-2);font-weight:600}
+
+.note{padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--surface)}
+.note.quote{border-left:3px solid var(--accent)}
+.note .txt{white-space:pre-wrap;line-height:1.6}
+.note.quote .txt{font-style:italic}
+.note-meta{display:flex;gap:10px;align-items:center;margin-top:9px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+
+/* ---------- stats ---------- */
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.tile{padding:15px;border:1px solid var(--border);border-radius:12px;background:var(--surface)}
+.tile .n{font-size:27px;font-weight:660;letter-spacing:-.03em;line-height:1.15}
+.tile .l{font-size:12px;color:var(--muted);margin-top:4px}
+.tile .d{font-size:11.5px;color:var(--text-2);margin-top:6px}
+
+.chart-wrap{position:relative}
+.chart-wrap svg{display:block;width:100%;height:auto;overflow:visible}
+.tip{
+  position:absolute;pointer-events:none;opacity:0;transition:opacity .1s;
+  background:var(--text);color:var(--bg);padding:7px 10px;border-radius:8px;font-size:12px;
+  white-space:nowrap;transform:translate(-50%,-100%);z-index:40;line-height:1.45;font-weight:550;
+}
+.tip b{font-weight:700}
+
+.heat{overflow-x:auto;padding-bottom:4px}
+.heat-legend{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted);margin-top:10px}
+.heat-legend i{width:13px;height:13px;border-radius:3px;display:block}
+
+details.table-view{margin-top:14px}
+details.table-view summary{cursor:pointer;font-size:12.5px;color:var(--muted);font-weight:550;list-style:none}
+details.table-view summary::-webkit-details-marker{display:none}
+details.table-view summary:before{content:"▸ ";display:inline-block;transition:transform .12s}
+details.table-view[open] summary:before{content:"▾ "}
+details.table-view summary:hover{color:var(--text)}
+.tbl-scroll{overflow-x:auto;margin-top:10px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{text-align:left;padding:7px 12px 7px 0;border-bottom:1px solid var(--grid);white-space:nowrap}
+th{color:var(--muted);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;padding-right:0}
+
+/* ---------- toast ---------- */
+#toast{
+  position:fixed;left:50%;bottom:26px;transform:translate(-50%,20px);z-index:100;
+  background:var(--text);color:var(--bg);padding:11px 18px;border-radius:10px;font-size:14px;font-weight:560;
+  opacity:0;pointer-events:none;transition:opacity .18s,transform .18s;box-shadow:var(--shadow);max-width:88vw;text-align:center;
+}
+#toast.on{opacity:1;transform:translate(-50%,0)}
+
+.section{display:none}
+.section.on{display:block}
+.sep{height:1px;background:var(--border);margin:16px 0}
+.foot{margin-top:26px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:center}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="head-in">
+    <div class="brand"><span class="dot"></span> Biblioteca</div>
+    <div class="head-spacer"></div>
+    <div class="streak-pill" id="headStreak"></div>
+    <button class="icon-btn" id="themeBtn" title="Alternar tema" aria-label="Alternar tema">◐</button>
+  </div>
+  <nav class="tabs" role="tablist">
+    <button class="tab" role="tab" data-view="hoje" aria-selected="true">Hoje</button>
+    <button class="tab" role="tab" data-view="estante" aria-selected="false">Estante</button>
+    <button class="tab" role="tab" data-view="progresso" aria-selected="false">Progresso</button>
+    <button class="tab" role="tab" data-view="notas" aria-selected="false">Notas</button>
+  </nav>
+</header>
+
+<div class="wrap">
+
+  <!-- ================= HOJE ================= -->
+  <section class="section on" id="view-hoje">
+    <div class="card" style="margin-top:16px">
+      <div class="today">
+        <div class="ring">
+          <svg viewBox="0 0 120 120" width="132" height="132" aria-hidden="true">
+            <circle cx="60" cy="60" r="52" fill="none" stroke="var(--surface-2)" stroke-width="11"></circle>
+            <circle id="ringArc" cx="60" cy="60" r="52" fill="none" stroke="var(--accent)" stroke-width="11"
+                    stroke-linecap="round" stroke-dasharray="0 327" style="transition:stroke-dasharray .5s"></circle>
+          </svg>
+          <div class="val"><span class="n" id="ringNum">0</span><span class="l" id="ringLbl">de 20 págs</span></div>
+        </div>
+        <div class="today-meta">
+          <div class="big" id="todayHeadline">Bom dia — hora de ler.</div>
+          <div class="mini-stats" id="todayMini"></div>
+          <div class="row" style="margin-top:2px">
+            <div class="field" style="width:130px">
+              <label for="goalPages">Meta diária (págs)</label>
+              <input type="number" id="goalPages" min="1" step="1">
+            </div>
+            <div class="field" style="width:130px">
+              <label for="goalMin">Meta diária (min)</label>
+              <input type="number" id="goalMin" min="1" step="1">
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Registrar leitura</h2><span class="sub">leve 15 segundos, todo dia</span></div>
+      <form id="sessionForm" autocomplete="off">
+        <div class="row">
+          <div class="field grow" style="flex-basis:240px">
+            <label for="sBook">Livro</label>
+            <select id="sBook" required></select>
+          </div>
+          <div class="field" style="width:120px">
+            <label for="sDate">Data</label>
+            <input type="date" id="sDate" required>
+          </div>
+          <div class="field" style="width:120px">
+            <label for="sStop">Parei na pág.</label>
+            <input type="number" id="sStop" min="0" step="1" placeholder="—">
+          </div>
+          <div class="field" style="width:110px">
+            <label for="sPages">Páginas lidas</label>
+            <input type="number" id="sPages" min="0" step="1" placeholder="0">
+          </div>
+          <div class="field" style="width:100px">
+            <label for="sMin">Minutos</label>
+            <input type="number" id="sMin" min="0" step="1" placeholder="0">
+          </div>
+          <button class="btn primary" type="submit">Registrar</button>
+        </div>
+        <p class="hint" style="margin-top:9px">Preencha <b>parei na pág.</b> e o resto é calculado — ou informe só as páginas lidas.</p>
+      </form>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Lendo agora</h2><span class="sub" id="readingSub"></span></div>
+      <div class="books" id="readingNow"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Últimas sessões</h2></div>
+      <div class="list" id="recentSessions"></div>
+    </div>
+  </section>
+
+  <!-- ================= ESTANTE ================= -->
+  <section class="section" id="view-estante">
+    <div class="card" style="margin-top:16px">
+      <div class="card-head"><h2 id="bookFormTitle">Adicionar livro</h2><span class="sub" id="bookFormSub">o que entra na fila</span></div>
+      <form id="bookForm" autocomplete="off">
+        <input type="hidden" id="bId">
+        <div class="row" style="margin-bottom:12px">
+          <div class="field lookup">
+            <label for="lookup">Buscar dados do livro <span style="font-weight:400">(Open Library — precisa de internet)</span></label>
+            <input type="search" id="lookup" placeholder="Digite título e autor — ex.: torto arado itamar">
+            <div class="results" id="lookupResults" hidden></div>
+          </div>
+        </div>
+        <div class="row">
+          <div class="field grow" style="flex-basis:220px">
+            <label for="bTitle">Título</label>
+            <input type="text" id="bTitle" required placeholder="Ex.: Dom Casmurro">
+          </div>
+          <div class="field grow" style="flex-basis:170px">
+            <label for="bAuthor">Autor</label>
+            <input type="text" id="bAuthor" placeholder="Machado de Assis">
+          </div>
+          <div class="field" style="width:105px">
+            <label for="bPages">Páginas</label>
+            <input type="number" id="bPages" min="1" step="1" placeholder="256">
+          </div>
+          <div class="field" style="width:135px">
+            <label for="bStatus">Situação</label>
+            <select id="bStatus">
+              <option value="fila">Quero ler</option>
+              <option value="lendo">Lendo</option>
+              <option value="lido">Lido</option>
+              <option value="abandonado">Abandonado</option>
+            </select>
+          </div>
+          <div class="field" style="width:120px">
+            <label for="bPriority">Prioridade</label>
+            <select id="bPriority">
+              <option value="2">Alta</option>
+              <option value="1" selected>Média</option>
+              <option value="0">Baixa</option>
+            </select>
+          </div>
+          <div class="field" style="width:auto">
+            <label>Capa</label>
+            <div class="cover-pick">
+              <div class="thumb" id="coverPreview"><span>+</span></div>
+              <div class="btns">
+                <input type="file" id="coverFile" accept="image/*" hidden>
+                <button type="button" class="btn sm" id="coverBtn">Escolher imagem</button>
+                <button type="button" class="btn sm" id="coverClear" hidden>Remover</button>
+              </div>
+            </div>
+          </div>
+          <button class="btn primary" type="submit" id="bSubmit">Adicionar</button>
+          <button class="btn ghost" type="button" id="bCancel" hidden>Cancelar</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>Estante</h2>
+        <div class="head-spacer" style="flex:1"></div>
+        <div class="row" style="gap:8px">
+          <input type="search" id="shelfSearch" placeholder="Buscar título ou autor…" style="width:190px">
+          <select id="shelfFilter" style="width:150px">
+            <option value="todos">Todos</option>
+            <option value="lendo">Lendo</option>
+            <option value="fila">Quero ler</option>
+            <option value="lido">Lidos</option>
+            <option value="abandonado">Abandonados</option>
+          </select>
+        </div>
+      </div>
+      <div class="books" id="shelfList"></div>
+    </div>
+  </section>
+
+  <!-- ================= PROGRESSO ================= -->
+  <section class="section" id="view-progresso">
+    <div class="card" style="margin-top:16px">
+      <div class="card-head"><h2>Panorama</h2><span class="sub" id="statsRange"></span></div>
+      <div class="tiles" id="tiles"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Páginas por semana</h2><span class="sub">últimas 12 semanas · segunda a domingo</span></div>
+      <div class="chart-wrap" id="weeklyWrap">
+        <div class="tip" id="weeklyTip"></div>
+        <svg id="weeklyChart" viewBox="0 0 720 250" role="img" aria-label="Gráfico de barras: páginas lidas por semana"></svg>
+      </div>
+      <details class="table-view"><summary>Ver tabela</summary><div class="tbl-scroll" id="weeklyTable"></div></details>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Constância</h2><span class="sub">páginas por dia nas últimas 26 semanas</span></div>
+      <div class="chart-wrap heat" id="heatWrap">
+        <div class="tip" id="heatTip"></div>
+        <svg id="heatChart" role="img" aria-label="Mapa de calor: páginas lidas por dia"></svg>
+      </div>
+      <div class="heat-legend">
+        <span>menos</span>
+        <i style="background:var(--heat-0)"></i><i style="background:var(--heat-1)"></i><i style="background:var(--heat-2)"></i>
+        <i style="background:var(--heat-3)"></i><i style="background:var(--heat-4)"></i><i style="background:var(--heat-5)"></i>
+        <span>mais</span>
+      </div>
+      <details class="table-view"><summary>Ver tabela (dias com leitura)</summary><div class="tbl-scroll" id="heatTable"></div></details>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Concluídos</h2><span class="sub">seus livros terminados</span></div>
+      <div class="list" id="finishedList"></div>
+    </div>
+
+    <div class="foot">
+      <button class="btn sm" id="exportBtn">Exportar dados (.json)</button>
+      <button class="btn sm" id="importBtn">Importar</button>
+      <input type="file" id="importFile" accept="application/json" hidden>
+      <button class="btn sm" id="seedBtn">Carregar exemplo</button>
+      <button class="btn sm danger" id="resetBtn">Apagar tudo</button>
+    </div>
+  </section>
+
+  <!-- ================= NOTAS ================= -->
+  <section class="section" id="view-notas">
+    <div class="card" style="margin-top:16px">
+      <div class="card-head"><h2>Nova anotação</h2><span class="sub">citações e ideias que valem guardar</span></div>
+      <form id="noteForm" autocomplete="off">
+        <div class="row">
+          <div class="field grow" style="flex-basis:240px">
+            <label for="nBook">Livro</label>
+            <select id="nBook" required></select>
+          </div>
+          <div class="field" style="width:110px">
+            <label for="nPage">Página</label>
+            <input type="number" id="nPage" min="0" step="1" placeholder="—">
+          </div>
+          <div class="field" style="width:140px">
+            <label for="nType">Tipo</label>
+            <select id="nType">
+              <option value="quote">Citação</option>
+              <option value="note">Comentário</option>
+            </select>
+          </div>
+        </div>
+        <div class="field" style="margin-top:10px">
+          <label for="nText">Texto</label>
+          <textarea id="nText" required placeholder="Cole o trecho ou escreva sua ideia…"></textarea>
+        </div>
+        <div class="row" style="margin-top:10px"><button class="btn primary" type="submit">Guardar</button></div>
+      </form>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>Anotações</h2>
+        <div style="flex:1"></div>
+        <div class="row" style="gap:8px">
+          <input type="search" id="noteSearch" placeholder="Buscar no texto…" style="width:190px">
+          <select id="noteFilter" style="width:170px"></select>
+        </div>
+      </div>
+      <div class="grid" id="notesList" style="gap:12px"></div>
+    </div>
+  </section>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+"use strict";
+
+/* =======================================================================
+   Estado e persistência
+   ======================================================================= */
+const KEY = "biblioteca.leitura.v1";
+
+const defaultState = () => ({
+  books: [], sessions: [], notes: [],
+  settings: { goalPages: 20, goalMinutes: 30, theme: "auto" }
+});
+
+let state = load();
+let editingBook = null;
+
+function load() {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (!raw) return defaultState();
+    const parsed = JSON.parse(raw);
+    return Object.assign(defaultState(), parsed, {
+      settings: Object.assign(defaultState().settings, parsed.settings || {})
+    });
+  } catch (e) {
+    console.warn("Dados corrompidos, começando do zero.", e);
+    return defaultState();
+  }
+}
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(state)); }
+  catch (e) { toast("Não consegui salvar (armazenamento cheio?)"); }
+}
+const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+
+/* =======================================================================
+   Datas (sempre no fuso local — nada de UTC)
+   ======================================================================= */
+const toISO = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+const fromISO = s => { const [y,m,d] = s.split("-").map(Number); return new Date(y, m-1, d); };
+const todayISO = () => toISO(new Date());
+const shiftISO = (s, n) => { const d = fromISO(s); d.setDate(d.getDate()+n); return toISO(d); };
+const daysBetween = (a, b) => Math.round((fromISO(b) - fromISO(a)) / 86400000);
+const fmtDate = s => fromISO(s).toLocaleDateString("pt-BR", { day:"2-digit", month:"short" });
+const fmtShort = s => { const d = fromISO(s); return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}`; };
+const fmtDateLong = s => fromISO(s).toLocaleDateString("pt-BR", { day:"2-digit", month:"long", year:"numeric" });
+/** Segunda-feira da semana de `iso`. */
+function weekStart(iso) {
+  const d = fromISO(iso);
+  const back = (d.getDay() + 6) % 7;      // 0 = segunda
+  d.setDate(d.getDate() - back);
+  return toISO(d);
+}
+function relDay(iso) {
+  const diff = daysBetween(iso, todayISO());
+  if (diff === 0) return "hoje";
+  if (diff === 1) return "ontem";
+  if (diff < 7) return `há ${diff} dias`;
+  return fmtDate(iso);
+}
+
+/* =======================================================================
+   Consultas sobre os dados
+   ======================================================================= */
+const bookById = id => state.books.find(b => b.id === id);
+const bookTitle = id => (bookById(id) || {}).title || "Livro removido";
+const sessionsOf = id => state.sessions.filter(s => s.bookId === id);
+const sum = (arr, f) => arr.reduce((t, x) => t + (f(x) || 0), 0);
+
+function dayTotals() {
+  const map = new Map();
+  for (const s of state.sessions) {
+    const cur = map.get(s.date) || { pages: 0, minutes: 0, count: 0 };
+    cur.pages += s.pages || 0; cur.minutes += s.minutes || 0; cur.count++;
+    map.set(s.date, cur);
+  }
+  return map;
+}
+function activeDays() {
+  return new Set(state.sessions.filter(s => (s.pages || 0) > 0 || (s.minutes || 0) > 0).map(s => s.date));
+}
+/** Sequência atual: dias seguidos com leitura, terminando hoje ou ontem. */
+function currentStreak() {
+  const days = activeDays();
+  let d = todayISO();
+  if (!days.has(d)) {
+    d = shiftISO(d, -1);
+    if (!days.has(d)) return 0;
+  }
+  let n = 0;
+  while (days.has(d)) { n++; d = shiftISO(d, -1); }
+  return n;
+}
+function bestStreak() {
+  const days = [...activeDays()].sort();
+  let best = 0, run = 0, prev = null;
+  for (const d of days) {
+    run = (prev && daysBetween(prev, d) === 1) ? run + 1 : 1;
+    prev = d; if (run > best) best = run;
+  }
+  return best;
+}
+/** Páginas por dia nos últimos `win` dias (ritmo). */
+function pace(win = 30, bookId = null) {
+  const from = shiftISO(todayISO(), -(win - 1));
+  const rel = state.sessions.filter(s => s.date >= from && (!bookId || s.bookId === bookId));
+  return sum(rel, s => s.pages) / win;
+}
+/** Previsão de término do livro em leitura. */
+function forecast(book) {
+  const total = book.pages || 0, done = Math.min(book.current || 0, total);
+  const left = total - done;
+  if (!total || left <= 0) return null;
+  let p = pace(30, book.id);
+  if (p <= 0) p = pace(30);
+  if (p <= 0) return null;
+  const days = Math.ceil(left / p);
+  if (days > 3650) return null;
+  return { days, date: shiftISO(todayISO(), days), pace: p, left };
+}
+
+/* =======================================================================
+   Ações
+   ======================================================================= */
+function logSession({ bookId, date, stopPage, pages, minutes }) {
+  const book = bookById(bookId);
+  if (!book) return toast("Escolha um livro.");
+
+  let read = pages || 0;
+  if (stopPage !== null && stopPage !== undefined && stopPage !== "") {
+    let stop = Math.max(0, Math.round(stopPage));
+    if (book.pages) stop = Math.min(stop, book.pages);       // não conta página além do livro
+    read = Math.max(0, stop - (book.current || 0));
+    book.current = stop;
+  } else if (read > 0) {
+    book.current = book.pages ? Math.min((book.current || 0) + read, book.pages) : (book.current || 0) + read;
+  }
+  if (read <= 0 && !(minutes > 0)) return toast("Informe páginas ou minutos.");
+
+  if (book.status === "fila" || book.status === "abandonado") {
+    book.status = "lendo";
+    book.startedAt = book.startedAt || date;
+  }
+  state.sessions.push({ id: uid(), bookId, date, pages: read, minutes: minutes || 0, createdAt: Date.now() });
+
+  let finished = false;
+  if (book.pages && book.current >= book.pages && book.status !== "lido") {
+    book.status = "lido"; book.finishedAt = date; finished = true;
+  }
+  save(); renderAll();
+  toast(finished ? `🎉 "${book.title}" concluído!` : `+${read} pág${read === 1 ? "" : "s"} registradas`);
+}
+
+function setStatus(id, status) {
+  const b = bookById(id); if (!b) return;
+  b.status = status;
+  if (status === "lendo" && !b.startedAt) b.startedAt = todayISO();
+  if (status === "lido") { b.finishedAt = b.finishedAt || todayISO(); if (b.pages) b.current = b.pages; }
+  if (status !== "lido") b.finishedAt = null;
+  save(); renderAll();
+}
+function removeBook(id) {
+  const b = bookById(id); if (!b) return;
+  const n = sessionsOf(id).length;
+  if (!confirm(`Excluir "${b.title}"${n ? ` e suas ${n} sessões` : ""}?`)) return;
+  state.books = state.books.filter(x => x.id !== id);
+  state.sessions = state.sessions.filter(s => s.bookId !== id);
+  state.notes = state.notes.filter(n2 => n2.bookId !== id);
+  save(); renderAll(); toast("Livro excluído.");
+}
+
+/* =======================================================================
+   Render — Hoje
+   ======================================================================= */
+function renderToday() {
+  const totals = dayTotals();
+  const t = totals.get(todayISO()) || { pages: 0, minutes: 0 };
+  const goal = state.settings.goalPages || 20;
+  const pct = Math.min(1, goal ? t.pages / goal : 0);
+  const C = 2 * Math.PI * 52;
+
+  const arc = document.getElementById("ringArc");
+  arc.setAttribute("stroke-dasharray", `${(pct * C).toFixed(1)} ${C.toFixed(1)}`);
+  arc.setAttribute("stroke", pct >= 1 ? "var(--good)" : "var(--accent)");
+  arc.style.opacity = pct > 0 ? "1" : "0";   // sem "pontinho" da ponta arredondada em 0%
+  document.getElementById("ringNum").textContent = t.pages;
+  document.getElementById("ringLbl").textContent = `de ${goal} págs`;
+
+  const streak = currentStreak();
+  const readToday = totals.has(todayISO());
+  const hl = document.getElementById("todayHeadline");
+  if (t.pages >= goal) hl.textContent = "Meta do dia batida. 🎉";
+  else if (readToday) hl.textContent = `Faltam ${goal - t.pages} páginas para a meta de hoje.`;
+  else if (streak > 0) hl.textContent = `Sequência de ${streak} dia${streak === 1 ? "" : "s"} — não deixe cair hoje.`;
+  else hl.textContent = "Nenhuma leitura hoje. Comece com 10 minutos.";
+
+  document.getElementById("todayMini").innerHTML = [
+    ["Minutos hoje", `${t.minutes}`, `meta ${state.settings.goalMinutes}`],
+    ["Sequência", `${streak}`, `recorde ${bestStreak()}`],
+    ["Ritmo (30d)", pace(30).toFixed(1), "págs/dia"]
+  ].map(([l, n, d]) => `<div><span class="n">${n}</span><span class="l">${l} · ${d}</span></div>`).join("");
+
+  document.getElementById("headStreak").innerHTML =
+    `🔥 <b>${streak}</b> dia${streak === 1 ? "" : "s"} · <b>${t.pages}</b>/${goal} págs hoje`;
+
+  // seletor de livros do formulário
+  const sel = document.getElementById("sBook");
+  const keep = sel.value;
+  const order = { lendo: 0, fila: 1, abandonado: 2, lido: 3 };
+  const opts = [...state.books].sort((a, b) => (order[a.status] - order[b.status]) || a.title.localeCompare(b.title));
+  sel.innerHTML = opts.length
+    ? opts.map(b => `<option value="${b.id}">${esc(b.title)}${b.status === "lendo" ? "" : ` — ${statusLabel(b.status)}`}</option>`).join("")
+    : `<option value="">— cadastre um livro na Estante —</option>`;
+  if (opts.some(b => b.id === keep)) sel.value = keep;
+
+  // lendo agora
+  const reading = state.books.filter(b => b.status === "lendo")
+    .sort((a, b) => (b.priority || 0) - (a.priority || 0));
+  document.getElementById("readingSub").textContent = reading.length ? `${reading.length} em andamento` : "";
+  document.getElementById("readingNow").innerHTML = reading.length
+    ? reading.map(b => bookCard(b, true)).join("")
+    : `<div class="empty">Nenhum livro em andamento. Vá até a <b>Estante</b> e comece um.</div>`;
+
+  // sessões recentes
+  const recent = [...state.sessions].sort((a, b) => (b.date === a.date ? b.createdAt - a.createdAt : b.date < a.date ? -1 : 1)).slice(0, 12);
+  document.getElementById("recentSessions").innerHTML = recent.length
+    ? recent.map(s => `
+      <div class="item">
+        <div class="grow">
+          <div class="ttl">${esc(bookTitle(s.bookId))}</div>
+          <div class="sub">${relDay(s.date)}${s.minutes ? ` · ${s.minutes} min` : ""}</div>
+        </div>
+        <span class="num">${s.pages} pág${s.pages === 1 ? "" : "s"}</span>
+        <button class="icon-btn" data-del-session="${s.id}" title="Excluir sessão">✕</button>
+      </div>`).join("")
+    : `<div class="empty">Ainda sem sessões registradas.</div>`;
+}
+
+/* =======================================================================
+   Open Library — busca de metadados (título, autor, páginas, capa, sinopse)
+   Sem chave de API. Só a sua busca sai daqui; nenhum dado seu é enviado.
+   ======================================================================= */
+const OL = {
+  search(q, signal) {
+    const url = "https://openlibrary.org/search.json?q=" + encodeURIComponent(q) +
+      "&limit=6&fields=key,title,author_name,number_of_pages_median,first_publish_year,cover_i,isbn";
+    return fetch(url, { signal }).then(r => r.json());
+  },
+  cover: (id, size) => `https://covers.openlibrary.org/b/id/${id}-${size}.jpg`,
+  async synopsis(key) {
+    try {
+      const w = await (await fetch(`https://openlibrary.org${key}.json`)).json();
+      const d = typeof w.description === "string" ? w.description : (w.description || {}).value;
+      return (d || "").split("\n")[0].replace(/\(\[.*?\)\s*$/, "").trim().slice(0, 600) || null;
+    } catch (e) { return null; }
+  }
+};
+
+let picked = {};        // metadados escolhidos, aplicados ao salvar
+let coverTouched = false;
+let lookupDocs = [];
+let lookupTimer, lookupAbort;
+const lookupInput = document.getElementById("lookup");
+const lookupBox = document.getElementById("lookupResults");
+
+const hideLookup = () => { lookupBox.hidden = true; lookupBox.innerHTML = ""; };
+const showLookup = html => { lookupBox.innerHTML = html; lookupBox.hidden = false; };
+
+async function runLookup(q) {
+  if (q.length < 3) return hideLookup();
+  if (lookupAbort) lookupAbort.abort();
+  lookupAbort = new AbortController();
+  showLookup(`<div class="res-msg">Buscando…</div>`);
+  try {
+    const j = await OL.search(q, lookupAbort.signal);
+    lookupDocs = (j.docs || []).filter(d => d.title);
+    if (!lookupDocs.length) return showLookup(`<div class="res-msg">Nada encontrado. Preencha os campos abaixo à mão.</div>`);
+    showLookup(lookupDocs.map((d, i) => {
+      const meta = [(d.author_name || [])[0] || "autor desconhecido",
+                    d.first_publish_year, d.number_of_pages_median && `${d.number_of_pages_median} págs`]
+                   .filter(Boolean).join(" · ");
+      return `<button type="button" class="res" data-res="${i}">
+        ${d.cover_i ? `<img src="${OL.cover(d.cover_i, "S")}" alt="" loading="lazy" onerror="this.className='nocover'">` : `<span class="nocover"></span>`}
+        <span style="min-width:0"><span class="t">${esc(d.title)}</span><span class="s">${esc(meta)}</span></span>
+      </button>`;
+    }).join(""));
+  } catch (e) {
+    if (e.name === "AbortError") return;
+    showLookup(`<div class="res-msg">Não consegui falar com a Open Library (offline?). Preencha à mão.</div>`);
+  }
+}
+
+lookupInput.addEventListener("input", () => {
+  clearTimeout(lookupTimer);
+  const q = lookupInput.value.trim();
+  if (q.length < 3) return hideLookup();
+  lookupTimer = setTimeout(() => runLookup(q), 400);
+});
+lookupInput.addEventListener("keydown", e => {
+  if (e.key === "Escape") hideLookup();
+  if (e.key === "Enter") { e.preventDefault(); clearTimeout(lookupTimer); runLookup(lookupInput.value.trim()); }
+});
+document.addEventListener("click", e => { if (!e.target.closest(".lookup")) hideLookup(); });
+
+lookupBox.addEventListener("click", e => {
+  const btn = e.target.closest("[data-res]"); if (!btn) return;
+  const d = lookupDocs[+btn.dataset.res];
+  document.getElementById("bTitle").value = d.title;
+  document.getElementById("bAuthor").value = (d.author_name || [])[0] || "";
+  if (d.number_of_pages_median) document.getElementById("bPages").value = d.number_of_pages_median;
+  picked = {
+    cover: d.cover_i ? OL.cover(d.cover_i, "M") : null,
+    year: d.first_publish_year || null,
+    isbn: (d.isbn || [])[0] || null,
+    olKey: d.key || null
+  };
+  hideLookup();
+  lookupInput.value = "";
+  setCoverPreview(picked.cover);
+  toast("Campos preenchidos — confira o nº de páginas da sua edição.");
+  if (d.key) OL.synopsis(d.key).then(s => { if (s && picked.olKey === d.key) picked.synopsis = s; });
+});
+
+/* =======================================================================
+   Capa manual — a imagem é reduzida e guardada junto com os dados
+   ======================================================================= */
+const coverFile = document.getElementById("coverFile");
+
+function setCoverPreview(src) {
+  const box = document.getElementById("coverPreview");
+  box.innerHTML = src ? `<img src="${esc(src)}" alt="Prévia da capa" onerror="this.remove()">` : `<span>+</span>`;
+  document.getElementById("coverClear").hidden = !src;
+}
+
+/** Redimensiona para no máximo 360px e devolve um data URI leve. */
+function fileToCover(file) {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith("image/")) return reject(new Error("Isso não é uma imagem."));
+    if (file.size > 12 * 1024 * 1024) return reject(new Error("Imagem muito grande (máx. 12 MB)."));
+    const fr = new FileReader();
+    fr.onerror = () => reject(new Error("Não consegui ler o arquivo."));
+    fr.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("Formato de imagem não suportado."));
+      img.onload = () => {
+        const scale = Math.min(1, 360 / Math.max(img.width, img.height));
+        const c = document.createElement("canvas");
+        c.width = Math.round(img.width * scale);
+        c.height = Math.round(img.height * scale);
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        resolve(c.toDataURL("image/jpeg", .8));
+      };
+      img.src = fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
+}
+
+document.getElementById("coverBtn").addEventListener("click", () => coverFile.click());
+document.getElementById("coverClear").addEventListener("click", () => {
+  picked.cover = null; coverTouched = true; setCoverPreview(null); coverFile.value = "";
+  toast("Capa removida.");
+});
+coverFile.addEventListener("change", async e => {
+  const file = e.target.files[0]; if (!file) return;
+  try {
+    picked.cover = await fileToCover(file);
+    coverTouched = true;
+    setCoverPreview(picked.cover);
+    toast("Capa carregada.");
+  } catch (err) { toast(err.message); }
+  e.target.value = "";
+});
+
+/* =======================================================================
+   Render — Estante
+   ======================================================================= */
+const statusLabel = s => ({ fila: "Quero ler", lendo: "Lendo", lido: "Lido", abandonado: "Abandonado" }[s] || s);
+const prioLabel = p => ({ 2: "Alta", 1: "Média", 0: "Baixa" }[p] ?? "Média");
+
+function bookCard(b, compact) {
+  const total = b.pages || 0;
+  const cur = Math.min(b.current || 0, total || Infinity);
+  const pct = total ? Math.min(100, Math.round(cur / total * 100)) : 0;
+  const f = b.status === "lendo" ? forecast(b) : null;
+  const stats = sessionsOf(b.id);
+  const spine = { lendo: "var(--accent)", fila: "var(--muted)", lido: "var(--good)", abandonado: "var(--critical)" }[b.status];
+
+  const foot = [];
+  if (total) foot.push(`<span><b>${cur}</b> / ${total} págs · ${pct}%</span>`);
+  else if (cur) foot.push(`<span><b>${cur}</b> págs lidas</span>`);
+  if (f) foot.push(`<span>termina por volta de <b>${fmtDate(f.date)}</b> (${f.days} d)</span>`);
+  if (b.status === "lido" && b.finishedAt) foot.push(`<span>concluído em <b>${fmtDate(b.finishedAt)}</b></span>`);
+  if (stats.length) foot.push(`<span>${stats.length} ${stats.length === 1 ? "sessão" : "sessões"} · ${sum(stats, s => s.minutes)} min</span>`);
+  if (b.status === "fila") foot.push(`<span>prioridade <b>${prioLabel(b.priority)}</b></span>`);
+
+  const acts = [];
+  if (b.status !== "lendo" && b.status !== "lido") acts.push(`<button class="btn sm" data-status="lendo" data-id="${b.id}">Começar</button>`);
+  if (b.status === "lendo") acts.push(`<button class="btn sm" data-status="lido" data-id="${b.id}">Concluir</button>`);
+  if (b.status === "lendo") acts.push(`<button class="btn sm" data-status="abandonado" data-id="${b.id}">Abandonar</button>`);
+  if (b.status === "lido") acts.push(`<button class="btn sm" data-status="lendo" data-id="${b.id}">Reabrir</button>`);
+  if (!compact) {
+    acts.push(`<button class="btn sm" data-edit="${b.id}">Editar</button>`);
+    acts.push(`<button class="btn sm danger" data-del-book="${b.id}">Excluir</button>`);
+  }
+
+  const initial = esc((b.title || "?").trim().charAt(0).toUpperCase());
+  const thumb = `<div class="thumb" style="background:${spine}">${
+    b.cover ? `<img src="${esc(b.cover)}" alt="Capa de ${esc(b.title)}" loading="lazy" onerror="this.remove()">` : `<span>${initial}</span>`
+  }</div>`;
+  const author = [b.author || "—", b.year].filter(Boolean).join(", ");
+
+  return `
+  <article class="book">
+    ${thumb}
+    <div style="min-width:0">
+      <div class="t">${esc(b.title)}</div>
+      <div class="a">${esc(author)} · <span class="chip" data-s="${b.status}"><i class="bullet"></i>${statusLabel(b.status)}</span></div>
+      ${total ? `<div class="bar"><i style="width:${pct}%;background:${spine}"></i></div>` : ""}
+      <div class="book-foot">${foot.join("")}</div>
+      ${!compact && b.synopsis ? `<p class="synopsis" title="${esc(b.synopsis)}">${esc(b.synopsis)}</p>` : ""}
+    </div>
+    <div class="acts">${acts.join("")}</div>
+  </article>`;
+}
+
+function renderShelf() {
+  const q = document.getElementById("shelfSearch").value.trim().toLowerCase();
+  const filter = document.getElementById("shelfFilter").value;
+  const order = { lendo: 0, fila: 1, lido: 2, abandonado: 3 };
+
+  const list = state.books
+    .filter(b => filter === "todos" || b.status === filter)
+    .filter(b => !q || b.title.toLowerCase().includes(q) || (b.author || "").toLowerCase().includes(q))
+    .sort((a, b) =>
+      (order[a.status] - order[b.status]) ||
+      ((b.priority || 0) - (a.priority || 0)) ||
+      ((b.finishedAt || "") < (a.finishedAt || "") ? -1 : 1) ||
+      a.title.localeCompare(b.title));
+
+  document.getElementById("shelfList").innerHTML = list.length
+    ? list.map(b => bookCard(b, false)).join("")
+    : `<div class="empty">${state.books.length ? "Nada com esse filtro." : "Sua estante está vazia. Adicione o primeiro livro acima."}</div>`;
+}
+
+/* =======================================================================
+   Render — Progresso (gráficos)
+   ======================================================================= */
+function weeklyData(weeks = 12) {
+  const totals = dayTotals();
+  const thisWeek = weekStart(todayISO());
+  const out = [];
+  for (let i = weeks - 1; i >= 0; i--) {
+    const start = shiftISO(thisWeek, -7 * i);
+    let pages = 0, minutes = 0;
+    for (let d = 0; d < 7; d++) {
+      const t = totals.get(shiftISO(start, d));
+      if (t) { pages += t.pages; minutes += t.minutes; }
+    }
+    out.push({ start, end: shiftISO(start, 6), pages, minutes, current: i === 0 });
+  }
+  return out;
+}
+
+function renderWeekly() {
+  const data = weeklyData(12);
+  const W = 720, H = 250, padL = 40, padR = 12, padT = 26, padB = 34;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const max = Math.max(10, ...data.map(d => d.pages));
+  const niceMax = Math.ceil(max / 10) * 10;
+  const band = plotW / data.length;
+  const barW = Math.min(38, band - 8);
+  const y = v => padT + plotH - (v / niceMax) * plotH;
+  const maxIdx = data.reduce((bi, d, i) => (d.pages > data[bi].pages ? i : bi), 0);
+
+  const ticks = [0, niceMax / 2, niceMax];
+  let svg = "";
+  for (const t of ticks) {
+    svg += `<line x1="${padL}" y1="${y(t)}" x2="${W - padR}" y2="${y(t)}" stroke="var(--grid)" stroke-width="1"/>`;
+    svg += `<text x="${padL - 8}" y="${y(t) + 4}" text-anchor="end" font-size="11" fill="var(--muted)" style="font-variant-numeric:tabular-nums">${t}</text>`;
+  }
+  data.forEach((d, i) => {
+    const x = padL + i * band + (band - barW) / 2;
+    const h = d.pages ? Math.max(3, plotH - (y(d.pages) - padT)) : 0;
+    const r = Math.min(4, h / 2, barW / 2);
+    if (h > 0) {
+      svg += `<path d="M${x} ${padT + plotH} L${x} ${padT + plotH - h + r} Q${x} ${padT + plotH - h} ${x + r} ${padT + plotH - h} L${x + barW - r} ${padT + plotH - h} Q${x + barW} ${padT + plotH - h} ${x + barW} ${padT + plotH - h + r} L${x + barW} ${padT + plotH} Z"
+        fill="var(--accent)" opacity="${d.current ? .85 : 1}"/>`;
+    }
+    // rótulo direto: só a maior semana e a semana atual
+    if ((i === maxIdx || d.current) && d.pages > 0) {
+      svg += `<text x="${x + barW / 2}" y="${padT + plotH - h - 7}" text-anchor="middle" font-size="11.5" font-weight="650" fill="var(--text-2)" style="font-variant-numeric:tabular-nums">${d.pages}</text>`;
+    }
+    svg += `<text x="${padL + i * band + band / 2}" y="${H - padB + 17}" text-anchor="middle" font-size="10.5" fill="var(--muted)" style="font-variant-numeric:tabular-nums">${fmtShort(d.start)}</text>`;
+    svg += `<rect class="hit" x="${padL + i * band}" y="${padT}" width="${band}" height="${plotH}" fill="transparent" data-i="${i}" data-top="${padT + plotH - h}"/>`;
+  });
+  svg += `<line x1="${padL}" y1="${padT + plotH}" x2="${W - padR}" y2="${padT + plotH}" stroke="var(--axis)" stroke-width="1"/>`;
+
+  const chart = document.getElementById("weeklyChart");
+  chart.innerHTML = svg;
+
+  const tip = document.getElementById("weeklyTip");
+  const wrap = document.getElementById("weeklyWrap");
+  chart.querySelectorAll(".hit").forEach(hit => {
+    hit.addEventListener("mouseenter", () => {
+      const d = data[+hit.dataset.i];
+      tip.innerHTML = `<b>${d.pages} pág${d.pages === 1 ? "" : "s"}</b>${d.minutes ? ` · ${d.minutes} min` : ""}<br>${fmtDate(d.start)} – ${fmtDate(d.end)}`;
+      const rect = hit.getBoundingClientRect(), wr = wrap.getBoundingClientRect();
+      const sr = chart.getBoundingClientRect();
+      const barTop = sr.top - wr.top + (+hit.dataset.top / H) * sr.height;   // ancora no topo da barra
+      tip.style.left = (rect.left - wr.left + rect.width / 2) + "px";
+      tip.style.top = Math.max(34, barTop - 6) + "px";
+      tip.style.opacity = "1";
+    });
+    hit.addEventListener("mouseleave", () => { tip.style.opacity = "0"; });
+  });
+
+  document.getElementById("weeklyTable").innerHTML = `
+    <table><thead><tr><th>Semana</th><th class="n">Páginas</th><th class="n">Minutos</th></tr></thead><tbody>
+    ${[...data].reverse().map(d => `<tr><td>${fmtDate(d.start)} – ${fmtDate(d.end)}</td><td class="n">${d.pages}</td><td class="n">${d.minutes}</td></tr>`).join("")}
+    </tbody></table>`;
+}
+
+function renderHeat() {
+  const WEEKS = 26, CELL = 14, GAP = 3, LEFT = 26, TOP = 18;
+  const totals = dayTotals();
+  const end = weekStart(todayISO());
+  const start = shiftISO(end, -7 * (WEEKS - 1));
+  const vals = [];
+  for (let i = 0; i < WEEKS * 7; i++) {
+    const iso = shiftISO(start, i);
+    vals.push({ iso, ...(totals.get(iso) || { pages: 0, minutes: 0 }) });
+  }
+  const nonZero = vals.filter(v => v.pages > 0).map(v => v.pages).sort((a, b) => a - b);
+  const q = p => nonZero.length ? nonZero[Math.min(nonZero.length - 1, Math.floor(p * nonZero.length))] : 0;
+  const cuts = [q(.2), q(.4), q(.6), q(.8)];
+  const level = p => p <= 0 ? 0 : p <= cuts[0] ? 1 : p <= cuts[1] ? 2 : p <= cuts[2] ? 3 : p <= cuts[3] ? 4 : 5;
+
+  const W = LEFT + WEEKS * (CELL + GAP), H = TOP + 7 * (CELL + GAP) + 4;
+  const today = todayISO();
+  let svg = "";
+  ["S", "T", "Q", "Q", "S", "S", "D"].forEach((d, r) => {
+    if (r % 2 === 0) svg += `<text x="0" y="${TOP + r * (CELL + GAP) + CELL - 3}" font-size="10" fill="var(--muted)">${d}</text>`;
+  });
+  let lastMonth = -1;
+  for (let w = 0; w < WEEKS; w++) {
+    const mDate = fromISO(shiftISO(start, w * 7));
+    if (mDate.getMonth() !== lastMonth) {
+      lastMonth = mDate.getMonth();
+      svg += `<text x="${LEFT + w * (CELL + GAP)}" y="${TOP - 6}" font-size="10" fill="var(--muted)">${mDate.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "")}</text>`;
+    }
+    for (let r = 0; r < 7; r++) {
+      const v = vals[w * 7 + r];
+      if (v.iso > today) continue;
+      const lv = level(v.pages);
+      svg += `<rect x="${LEFT + w * (CELL + GAP)}" y="${TOP + r * (CELL + GAP)}" width="${CELL}" height="${CELL}" rx="3"
+        fill="var(--heat-${lv})" data-iso="${v.iso}" data-p="${v.pages}" data-m="${v.minutes}"
+        ${v.iso === today ? 'stroke="var(--text-2)" stroke-width="1.5"' : ""}/>`;
+    }
+  }
+  const chart = document.getElementById("heatChart");
+  chart.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  chart.setAttribute("width", W); chart.setAttribute("height", H);
+  chart.style.width = W + "px"; chart.style.maxWidth = "none";
+  chart.innerHTML = svg;
+
+  const tip = document.getElementById("heatTip"), wrap = document.getElementById("heatWrap");
+  chart.querySelectorAll("rect[data-iso]").forEach(cell => {
+    cell.addEventListener("mouseenter", () => {
+      const p = +cell.dataset.p, m = +cell.dataset.m;
+      tip.innerHTML = `<b>${p} pág${p === 1 ? "" : "s"}</b>${m ? ` · ${m} min` : ""}<br>${fmtDateLong(cell.dataset.iso)}`;
+      const rect = cell.getBoundingClientRect(), wr = wrap.getBoundingClientRect();
+      tip.style.left = (rect.left - wr.left + wrap.scrollLeft + rect.width / 2) + "px";
+      tip.style.top = (rect.top - wr.top + 2) + "px";
+      tip.style.opacity = "1";
+    });
+    cell.addEventListener("mouseleave", () => { tip.style.opacity = "0"; });
+  });
+
+  const rows = vals.filter(v => v.pages > 0 || v.minutes > 0).reverse();
+  document.getElementById("heatTable").innerHTML = rows.length
+    ? `<table><thead><tr><th>Dia</th><th class="n">Páginas</th><th class="n">Minutos</th></tr></thead><tbody>
+       ${rows.map(v => `<tr><td>${fmtDateLong(v.iso)}</td><td class="n">${v.pages}</td><td class="n">${v.minutes}</td></tr>`).join("")}
+       </tbody></table>`
+    : `<div class="empty" style="margin-top:10px">Sem dias registrados no período.</div>`;
+}
+
+function renderStats() {
+  const year = new Date().getFullYear();
+  const finished = state.books.filter(b => b.status === "lido" && b.finishedAt);
+  const finishedYear = finished.filter(b => b.finishedAt.startsWith(String(year)));
+  const last30 = shiftISO(todayISO(), -29);
+  const s30 = state.sessions.filter(s => s.date >= last30);
+  const totalPages = sum(state.sessions, s => s.pages);
+  const totalMin = sum(state.sessions, s => s.minutes);
+  const p30 = pace(30);
+
+  document.getElementById("statsRange").textContent =
+    state.sessions.length ? `${state.sessions.length} sessões registradas` : "sem dados ainda";
+
+  const hrs = Math.floor(totalMin / 60), mins = totalMin % 60;
+  document.getElementById("tiles").innerHTML = [
+    { n: currentStreak(), l: "Dias seguidos", d: `recorde: ${bestStreak()}` },
+    { n: sum(s30, s => s.pages), l: "Páginas em 30 dias", d: `${p30.toFixed(1)} págs/dia` },
+    { n: finishedYear.length, l: `Livros lidos em ${year}`, d: `${finished.length} no total` },
+    { n: hrs ? `${hrs}h${String(mins).padStart(2, "0")}` : `${mins}min`, l: "Tempo total lido", d: `${totalPages} páginas` }
+  ].map(t => `<div class="tile"><div class="n">${t.n}</div><div class="l">${t.l}</div><div class="d">${t.d}</div></div>`).join("");
+
+  renderWeekly();
+  renderHeat();
+
+  const list = [...finished].sort((a, b) => b.finishedAt.localeCompare(a.finishedAt));
+  document.getElementById("finishedList").innerHTML = list.length
+    ? list.map(b => {
+        const ss = sessionsOf(b.id);
+        const span = b.startedAt && b.finishedAt ? daysBetween(b.startedAt, b.finishedAt) + 1 : null;
+        return `<div class="item">
+          <div class="grow">
+            <div class="ttl">${esc(b.title)}</div>
+            <div class="sub">${esc(b.author || "—")} · ${fmtDateLong(b.finishedAt)}${span ? ` · ${span} dia${span === 1 ? "" : "s"}` : ""}</div>
+          </div>
+          <span class="num">${b.pages || sum(ss, s => s.pages)} págs</span>
+        </div>`;
+      }).join("")
+    : `<div class="empty">Nenhum livro concluído ainda — o primeiro vem aí.</div>`;
+}
+
+/* =======================================================================
+   Render — Notas
+   ======================================================================= */
+function renderNotes() {
+  const selN = document.getElementById("nBook");
+  const keepN = selN.value;
+  selN.innerHTML = state.books.length
+    ? state.books.map(b => `<option value="${b.id}">${esc(b.title)}</option>`).join("")
+    : `<option value="">— cadastre um livro na Estante —</option>`;
+  if (state.books.some(b => b.id === keepN)) selN.value = keepN;
+
+  const filt = document.getElementById("noteFilter");
+  const keepF = filt.value;
+  const withNotes = state.books.filter(b => state.notes.some(n => n.bookId === b.id));
+  filt.innerHTML = `<option value="">Todos os livros</option>` +
+    withNotes.map(b => `<option value="${b.id}">${esc(b.title)}</option>`).join("");
+  filt.value = withNotes.some(b => b.id === keepF) ? keepF : "";
+
+  const q = document.getElementById("noteSearch").value.trim().toLowerCase();
+  const list = state.notes
+    .filter(n => !filt.value || n.bookId === filt.value)
+    .filter(n => !q || n.text.toLowerCase().includes(q) || bookTitle(n.bookId).toLowerCase().includes(q))
+    .sort((a, b) => b.createdAt - a.createdAt);
+
+  document.getElementById("notesList").innerHTML = list.length
+    ? list.map(n => `
+      <div class="note ${n.type === "quote" ? "quote" : ""}">
+        <div class="txt">${esc(n.text)}</div>
+        <div class="note-meta">
+          <span>${n.type === "quote" ? "❝ Citação" : "✎ Comentário"}</span>
+          <span>${esc(bookTitle(n.bookId))}${n.page ? `, p. ${n.page}` : ""}</span>
+          <div style="flex:1"></div>
+          <button class="icon-btn" data-del-note="${n.id}" title="Excluir">✕</button>
+        </div>
+      </div>`).join("")
+    : `<div class="empty">${state.notes.length ? "Nada encontrado." : "Nenhuma anotação ainda."}</div>`;
+}
+
+/* =======================================================================
+   Render geral + utilidades de UI
+   ======================================================================= */
+function renderAll() { renderToday(); renderShelf(); renderStats(); renderNotes(); }
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById("toast");
+  el.textContent = msg; el.classList.add("on");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("on"), 2600);
+}
+
+/* ---------- tema ---------- */
+function applyTheme() {
+  const t = state.settings.theme;
+  const dark = t === "dark" || (t === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
+  document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+  document.getElementById("themeBtn").textContent = dark ? "☀" : "◐";
+}
+document.getElementById("themeBtn").addEventListener("click", () => {
+  const dark = document.documentElement.getAttribute("data-theme") === "dark";
+  state.settings.theme = dark ? "light" : "dark";
+  save(); applyTheme(); renderStats();
+});
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+  if (state.settings.theme === "auto") applyTheme();
+});
+
+/* ---------- navegação ---------- */
+document.querySelectorAll(".tab").forEach(tab => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach(t => t.setAttribute("aria-selected", String(t === tab)));
+    document.querySelectorAll(".section").forEach(s => s.classList.toggle("on", s.id === "view-" + tab.dataset.view));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+});
+
+/* =======================================================================
+   Formulários e eventos
+   ======================================================================= */
+document.getElementById("sessionForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const bookId = document.getElementById("sBook").value;
+  if (!bookId) return toast("Cadastre um livro primeiro (aba Estante).");
+  logSession({
+    bookId,
+    date: document.getElementById("sDate").value || todayISO(),
+    stopPage: document.getElementById("sStop").value,
+    pages: +document.getElementById("sPages").value || 0,
+    minutes: +document.getElementById("sMin").value || 0
+  });
+  document.getElementById("sStop").value = "";
+  document.getElementById("sPages").value = "";
+  document.getElementById("sMin").value = "";
+});
+
+document.getElementById("bookForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const id = document.getElementById("bId").value;
+  const data = {
+    title: document.getElementById("bTitle").value.trim(),
+    author: document.getElementById("bAuthor").value.trim(),
+    pages: +document.getElementById("bPages").value || 0,
+    status: document.getElementById("bStatus").value,
+    priority: +document.getElementById("bPriority").value
+  };
+  if (!data.title) return;
+
+  // metadados buscados só sobrescrevem o que veio preenchido
+  for (const k of ["cover", "year", "isbn", "olKey", "synopsis"]) if (picked[k]) data[k] = picked[k];
+  if (coverTouched) data.cover = picked.cover || null;   // inclusive para remover
+
+  if (id) {
+    Object.assign(bookById(id), data);
+    toast("Livro atualizado.");
+  } else {
+    state.books.push(Object.assign({
+      id: uid(), current: 0, addedAt: todayISO(),
+      startedAt: data.status === "lendo" ? todayISO() : null,
+      finishedAt: data.status === "lido" ? todayISO() : null
+    }, data));
+    toast(`"${data.title}" na estante.`);
+  }
+  resetBookForm();
+  save(); renderAll();
+});
+
+function resetBookForm() {
+  const f = document.getElementById("bookForm");
+  f.reset();
+  document.getElementById("bId").value = "";
+  document.getElementById("bPriority").value = "1";
+  document.getElementById("bookFormTitle").textContent = "Adicionar livro";
+  document.getElementById("bookFormSub").textContent = "o que entra na fila";
+  document.getElementById("bSubmit").textContent = "Adicionar";
+  document.getElementById("bCancel").hidden = true;
+  editingBook = null;
+  picked = {};
+  coverTouched = false;
+  lookupInput.value = "";
+  hideLookup();
+  setCoverPreview(null);
+}
+document.getElementById("bCancel").addEventListener("click", resetBookForm);
+
+document.getElementById("noteForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const bookId = document.getElementById("nBook").value;
+  const text = document.getElementById("nText").value.trim();
+  if (!bookId) return toast("Cadastre um livro primeiro.");
+  if (!text) return;
+  state.notes.push({
+    id: uid(), bookId, text,
+    page: +document.getElementById("nPage").value || null,
+    type: document.getElementById("nType").value,
+    createdAt: Date.now()
+  });
+  document.getElementById("nText").value = "";
+  document.getElementById("nPage").value = "";
+  save(); renderNotes(); toast("Anotação guardada.");
+});
+
+/* delegação de cliques */
+document.addEventListener("click", e => {
+  const t = e.target.closest("[data-status],[data-edit],[data-del-book],[data-del-session],[data-del-note]");
+  if (!t) return;
+
+  if (t.dataset.status) return setStatus(t.dataset.id, t.dataset.status);
+  if (t.dataset.delBook) return removeBook(t.dataset.delBook);
+
+  if (t.dataset.edit) {
+    const b = bookById(t.dataset.edit); if (!b) return;
+    editingBook = b.id;
+    picked = {}; coverTouched = false;   // capa/sinopse atuais ficam como estão
+    lookupInput.value = ""; hideLookup();
+    setCoverPreview(b.cover);
+    document.getElementById("bId").value = b.id;
+    document.getElementById("bTitle").value = b.title;
+    document.getElementById("bAuthor").value = b.author || "";
+    document.getElementById("bPages").value = b.pages || "";
+    document.getElementById("bStatus").value = b.status;
+    document.getElementById("bPriority").value = String(b.priority ?? 1);
+    document.getElementById("bookFormTitle").textContent = "Editando livro";
+    document.getElementById("bookFormSub").textContent = b.title;
+    document.getElementById("bSubmit").textContent = "Salvar";
+    document.getElementById("bCancel").hidden = false;
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    return;
+  }
+  if (t.dataset.delSession) {
+    const s = state.sessions.find(x => x.id === t.dataset.delSession);
+    if (!s) return;
+    const b = bookById(s.bookId);
+    if (b) b.current = Math.max(0, (b.current || 0) - (s.pages || 0));   // devolve o progresso
+    state.sessions = state.sessions.filter(x => x.id !== s.id);
+    save(); renderAll(); toast("Sessão removida.");
+    return;
+  }
+  if (t.dataset.delNote) {
+    state.notes = state.notes.filter(n => n.id !== t.dataset.delNote);
+    save(); renderNotes(); toast("Anotação removida.");
+  }
+});
+
+/* filtros */
+["shelfSearch", "shelfFilter"].forEach(id => document.getElementById(id).addEventListener("input", renderShelf));
+["noteSearch", "noteFilter"].forEach(id => document.getElementById(id).addEventListener("input", renderNotes));
+
+/* metas */
+document.getElementById("goalPages").addEventListener("change", e => {
+  state.settings.goalPages = Math.max(1, +e.target.value || 20); save(); renderToday();
+});
+document.getElementById("goalMin").addEventListener("change", e => {
+  state.settings.goalMinutes = Math.max(1, +e.target.value || 30); save(); renderToday();
+});
+
+/* =======================================================================
+   Dados: exportar / importar / exemplo / apagar
+   ======================================================================= */
+document.getElementById("exportBtn").addEventListener("click", () => {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `biblioteca-${todayISO()}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  toast("Backup baixado.");
+});
+document.getElementById("importBtn").addEventListener("click", () => document.getElementById("importFile").click());
+document.getElementById("importFile").addEventListener("change", e => {
+  const file = e.target.files[0]; if (!file) return;
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const data = JSON.parse(r.result);
+      if (!Array.isArray(data.books) || !Array.isArray(data.sessions)) throw new Error("formato");
+      if (!confirm("Isso substitui os dados atuais. Continuar?")) return;
+      state = Object.assign(defaultState(), data, { settings: Object.assign(defaultState().settings, data.settings || {}) });
+      save(); applyTheme(); syncSettingsInputs(); renderAll(); toast("Dados importados.");
+    } catch (err) { toast("Arquivo inválido."); }
+  };
+  r.readAsText(file);
+  e.target.value = "";
+});
+document.getElementById("resetBtn").addEventListener("click", () => {
+  if (!confirm("Apagar TODOS os livros, sessões e anotações? Isso não tem volta.")) return;
+  state = defaultState(); save(); syncSettingsInputs(); renderAll(); toast("Tudo apagado.");
+});
+document.getElementById("seedBtn").addEventListener("click", () => {
+  if (state.books.length && !confirm("Isso adiciona livros e sessões de exemplo aos seus dados. Continuar?")) return;
+  seed(); save(); renderAll(); toast("Exemplo carregado.");
+});
+
+function seed() {
+  const mk = (title, author, pages, status, priority, current) => ({
+    id: uid(), title, author, pages, status, priority, current: current || 0,
+    addedAt: shiftISO(todayISO(), -70), startedAt: null, finishedAt: null
+  });
+  const a = mk("Os Sertões", "Euclides da Cunha", 624, "lendo", 2, 0);
+  const b = mk("O Cortiço", "Aluísio Azevedo", 240, "lido", 1, 240);
+  const c = mk("Vidas Secas", "Graciliano Ramos", 176, "fila", 2, 0);
+  const d = mk("A Hora da Estrela", "Clarice Lispector", 96, "fila", 0, 0);
+  state.books.push(a, b, c, d);
+
+  /* Espalha `target` páginas por uma janela de dias, pulando alguns (folgas). */
+  function seedSessions(book, fromDaysAgo, toDaysAgo, target) {
+    const span = fromDaysAgo - toDaysAgo + 1;
+    const avg = target / (span * .68);
+    let read = 0, first = null, last = null;
+    for (let i = fromDaysAgo; i >= toDaysAgo && read < target; i--) {
+      const date = shiftISO(todayISO(), -i);
+      const dow = fromISO(date).getDay();
+      if (Math.random() < (dow === 0 || dow === 6 ? .45 : .25)) continue;
+      const pages = Math.max(4, Math.min(Math.round(avg * (.6 + Math.random() * .8)), target - read));
+      read += pages;
+      first = first || date; last = date;
+      state.sessions.push({
+        id: uid(), bookId: book.id, date, pages,
+        minutes: Math.round(pages * (1.4 + Math.random() * .8)), createdAt: Date.now() - i * 86400000
+      });
+    }
+    book.current = book.status === "lido" ? book.pages : Math.min(book.pages, read);
+    book.startedAt = first; book.finishedAt = book.status === "lido" ? last : null;
+  }
+  seedSessions(b, 88, 34, 240);            // já concluído
+  seedSessions(a, 30, 0, 372);             // ~60% lido
+  state.notes.push(
+    { id: uid(), bookId: a.id, page: 114, type: "quote", text: "O sertanejo é, antes de tudo, um forte.", createdAt: Date.now() - 3 * 86400000 },
+    { id: uid(), bookId: b.id, page: 88, type: "note", text: "O cortiço funciona como personagem coletivo — reparar em como o narrador trata o espaço.", createdAt: Date.now() - 30 * 86400000 }
+  );
+}
+
+/* =======================================================================
+   Boot
+   ======================================================================= */
+function syncSettingsInputs() {
+  document.getElementById("goalPages").value = state.settings.goalPages;
+  document.getElementById("goalMin").value = state.settings.goalMinutes;
+  document.getElementById("sDate").value = todayISO();
+}
+applyTheme();
+syncSettingsInputs();
+renderAll();
+</script>
+</body>
+</html>
