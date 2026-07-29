@@ -2,8 +2,18 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Biblioteca — sistema de leitura</title>
+<meta name="description" content="Rotina de leitura: meta diária, fila de livros, progresso e anotações. Tudo no seu navegador.">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/favicon-32.png" sizes="32x32">
+<link rel="icon" href="icons/icon-192.png" sizes="192x192">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="theme-color" content="#f9f9f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Biblioteca">
+<meta name="mobile-web-app-capable" content="yes">
 <style>
 /* ---------- tokens ---------- */
 :root{
@@ -42,7 +52,10 @@ p{margin:0}
 button,input,select,textarea{font:inherit;color:inherit}
 a{color:var(--accent)}
 
-.wrap{max-width:1080px;margin:0 auto;padding:0 20px 64px}
+.wrap{
+  max-width:1080px;margin:0 auto;
+  padding:0 calc(20px + env(safe-area-inset-right)) calc(64px + env(safe-area-inset-bottom)) calc(20px + env(safe-area-inset-left));
+}
 
 /* ---------- header ---------- */
 header{
@@ -51,7 +64,10 @@ header{
   backdrop-filter:blur(12px);
   border-bottom:1px solid var(--border);
 }
-.head-in{max-width:1080px;margin:0 auto;padding:14px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.head-in{
+  max-width:1080px;margin:0 auto;display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  padding:calc(14px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right)) 14px calc(20px + env(safe-area-inset-left));
+}
 .brand{display:flex;align-items:center;gap:10px;font-weight:680;font-size:16px;letter-spacing:-.02em}
 .brand .dot{width:10px;height:10px;border-radius:3px;background:var(--accent)}
 .head-spacer{flex:1}
@@ -1202,12 +1218,15 @@ matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
 });
 
 /* ---------- navegação ---------- */
+function openView(view, scroll = true) {
+  const tab = document.querySelector(`.tab[data-view="${view}"]`);
+  if (!tab) return;
+  document.querySelectorAll(".tab").forEach(t => t.setAttribute("aria-selected", String(t === tab)));
+  document.querySelectorAll(".section").forEach(s => s.classList.toggle("on", s.id === "view-" + view));
+  if (scroll) window.scrollTo({ top: 0, behavior: "smooth" });
+}
 document.querySelectorAll(".tab").forEach(tab => {
-  tab.addEventListener("click", () => {
-    document.querySelectorAll(".tab").forEach(t => t.setAttribute("aria-selected", String(t === tab)));
-    document.querySelectorAll(".section").forEach(s => s.classList.toggle("on", s.id === "view-" + tab.dataset.view));
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  });
+  tab.addEventListener("click", () => openView(tab.dataset.view));
 });
 
 /* =======================================================================
@@ -1436,6 +1455,17 @@ function syncSettingsInputs() {
 applyTheme();
 syncSettingsInputs();
 renderAll();
+
+// atalho do ícone do app (manifest → shortcuts) e links diretos: ?v=hoje
+const wanted = new URLSearchParams(location.search).get("v");
+if (["hoje", "estante", "progresso", "notas"].includes(wanted)) openView(wanted, false);
+
+// offline: só faz sentido servido por http(s); em file:// o navegador nem registra
+if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").catch(e => console.warn("SW não registrado:", e));
+  });
+}
 </script>
 </body>
 </html>

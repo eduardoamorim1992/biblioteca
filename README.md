@@ -35,9 +35,27 @@ O campo *Buscar dados do livro* consulta a [Open Library](https://openlibrary.or
 - A cobertura é boa para literatura e fraca para títulos técnicos brasileiros. Nesses casos, use o campo **Capa** para escolher uma imagem do seu computador — ela é reduzida para 360px e guardada junto com os dados.
 - O número de páginas é o da edição que a Open Library conhece, que pode não ser a sua. Confira, porque é o que alimenta a previsão de término.
 
+## Instalar como app (PWA)
+
+Publicado em qualquer host HTTPS — Vercel, GitHub Pages, Netlify — o app pode ser instalado:
+
+- **Android/Chrome:** menu → *Instalar app*
+- **iPhone/Safari:** compartilhar → *Adicionar à Tela de Início*
+- **Desktop:** ícone de instalar na barra de endereço
+
+Instalado, ele ganha ícone próprio, abre em tela cheia sem barra do navegador e **funciona offline** — um service worker guarda o app em cache. Só a busca de metadados precisa de internet.
+
+Segurar o ícone abre o atalho *Registrar leitura*.
+
+Atualizações aparecem sozinhas: o service worker busca a versão nova pela rede quando há conexão, e só cai no cache quando não há.
+
+## Publicar
+
+É estático puro, sem build. Na Vercel: importe o repositório, *Framework Preset* → **Other**, e deixe build, output e install vazios. Cada `git push` na `main` redeploya.
+
 ## Stack
 
-HTML, CSS e JavaScript sem dependências. Gráficos em SVG escrito à mão. Tema claro e escuro.
+HTML, CSS e JavaScript sem dependências, sem build, sem framework. Gráficos em SVG escrito à mão. Tema claro e escuro. Ícones gerados por script.
 
 ## Licença
 
