@@ -8,6 +8,10 @@ Feito para dar rotina à leitura: registrar o que foi lido, ver a sequência de 
 
 **Hoje** — meta diária em páginas e minutos, anel de progresso, sequência de dias (streak) e o registro rápido de sessão: escolhe o livro, digita "parei na página X" e o resto é calculado.
 
+**Cronômetro** — aperte *Iniciar leitura* antes de começar. Ao encerrar, os minutos entram sozinhos e o app sugere em que página você deve estar, calculando pelo seu ritmo real (páginas por minuto do próprio livro, ou o geral se ainda não houver histórico). Você confirma ou corrige, e a sessão é gravada.
+
+O tempo é medido por relógio absoluto e o estado fica salvo: bloquear a tela, trocar de aba, fechar o navegador ou recarregar a página não perde nem atrasa a contagem.
+
 **Estante** — fila de leitura com quatro situações (quero ler, lendo, lido, abandonado), prioridade, busca e filtro. Registrar leitura em um livro da fila já o move para "lendo"; chegar na última página marca como lido.
 
 **Progresso** — páginas nos últimos 30 dias, ritmo médio, livros concluídos no ano, tempo total. Gráfico de barras por semana e mapa de constância dia a dia, ambos com tabela equivalente para quem prefere os números.

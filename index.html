@@ -149,6 +149,25 @@ textarea{resize:vertical;min-height:74px;line-height:1.55}
 .mini-stats .n{font-size:19px;font-weight:640;letter-spacing:-.02em}
 .mini-stats .l{font-size:11.5px;color:var(--muted)}
 
+/* ---------- cronômetro ---------- */
+.timer{display:flex;gap:22px;align-items:center;flex-wrap:wrap}
+.clock{
+  font-size:46px;font-weight:660;letter-spacing:-.03em;line-height:1;
+  font-variant-numeric:tabular-nums;min-width:158px;
+}
+.clock.on{color:var(--accent)}
+.clock .unit{font-size:15px;font-weight:550;color:var(--muted);letter-spacing:0;margin-left:3px}
+.timer-side{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;flex:1 1 240px}
+.timer-done{
+  margin-top:16px;padding-top:16px;border-top:1px solid var(--border);
+  display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;
+}
+.timer-done .msg{font-size:14px;font-weight:560;flex:1 1 100%}
+.timer-done .msg b{color:var(--accent)}
+.pulse{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent);margin-right:8px;vertical-align:middle;animation:pulse 1.8s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+@media(prefers-reduced-motion:reduce){.pulse{animation:none}}
+
 /* ---------- book cards ---------- */
 .books{display:grid;gap:12px}
 .book{
@@ -309,7 +328,31 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;padding-right:0}
     </div>
 
     <div class="card">
-      <div class="card-head"><h2>Registrar leitura</h2><span class="sub">leve 15 segundos, todo dia</span></div>
+      <div class="card-head"><h2>Cronômetro</h2><span class="sub" id="timerSub">aperte, leia, e o tempo se registra sozinho</span></div>
+      <div class="timer">
+        <div class="clock" id="clock">00:00</div>
+        <div class="timer-side">
+          <div class="field grow">
+            <label for="tBook">Livro</label>
+            <select id="tBook"></select>
+          </div>
+          <div class="row" id="timerBtns" style="gap:8px"></div>
+        </div>
+      </div>
+      <div class="timer-done" id="timerDone" hidden>
+        <p class="msg" id="timerMsg"></p>
+        <div class="field" style="width:150px">
+          <label for="tStop" id="tStopLabel">Parei na página</label>
+          <input type="number" id="tStop" min="0" step="1">
+        </div>
+        <button class="btn primary" type="button" id="tSave">Registrar sessão</button>
+        <button class="btn ghost" type="button" id="tDiscard">Descartar</button>
+        <p class="hint" style="flex:1 1 100%" id="tHint"></p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Registrar leitura</h2><span class="sub">ou à mão, se preferir</span></div>
       <form id="sessionForm" autocomplete="off">
         <div class="row">
           <div class="field grow" style="flex-basis:240px">
@@ -530,6 +573,7 @@ const KEY = "biblioteca.leitura.v1";
 
 const defaultState = () => ({
   books: [], sessions: [], notes: [],
+  timer: null,     // { bookId, startedAt, accumulated, running }
   settings: { goalPages: 20, goalMinutes: 30, theme: "auto" }
 });
 
@@ -688,8 +732,160 @@ function removeBook(id) {
   state.books = state.books.filter(x => x.id !== id);
   state.sessions = state.sessions.filter(s => s.bookId !== id);
   state.notes = state.notes.filter(n2 => n2.bookId !== id);
+  if (state.timer && state.timer.bookId === id) state.timer = null;
+  if (pendingSession && pendingSession.bookId === id) hidePending();
   save(); renderAll(); toast("Livro excluído.");
 }
+
+/* =======================================================================
+   Cronômetro
+   O tempo vem sempre de Date.now(), nunca de contar ticks — assim
+   bloquear a tela, trocar de aba ou recarregar não perde nem atrasa nada.
+   ======================================================================= */
+let tickHandle = null;
+let pendingSession = null;   // sessão encerrada, esperando confirmação
+
+const timerEl = {
+  clock: document.getElementById("clock"),
+  book: document.getElementById("tBook"),
+  btns: document.getElementById("timerBtns"),
+  sub: document.getElementById("timerSub"),
+  done: document.getElementById("timerDone"),
+  msg: document.getElementById("timerMsg"),
+  stop: document.getElementById("tStop"),
+  stopLabel: document.getElementById("tStopLabel"),
+  hint: document.getElementById("tHint")
+};
+
+const elapsedMs = () => {
+  const t = state.timer;
+  if (!t) return 0;
+  return t.accumulated + (t.running ? Math.max(0, Date.now() - t.startedAt) : 0);
+};
+function fmtClock(ms) {
+  const total = Math.floor(ms / 1000);
+  const h = Math.floor(total / 3600), m = Math.floor(total % 3600 / 60), s = total % 60;
+  const pad = n => String(n).padStart(2, "0");
+  return h ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+}
+
+/** Páginas por minuto observadas: do próprio livro se houver histórico, senão geral. */
+function pagesPerMinute(bookId) {
+  const usable = s => s.pages > 0 && s.minutes > 0;
+  let rel = state.sessions.filter(s => usable(s) && s.bookId === bookId);
+  if (rel.length < 3) rel = state.sessions.filter(usable);
+  if (!rel.length) return { rate: 0.5, base: "estimativa inicial de 30 págs/hora" };
+  const rate = sum(rel, s => s.pages) / sum(rel, s => s.minutes);
+  return { rate, base: `seu ritmo de ${(rate * 60).toFixed(0)} págs/hora` };
+}
+
+function paintTimer() {
+  const t = state.timer;
+  timerEl.clock.textContent = fmtClock(elapsedMs());
+  timerEl.clock.classList.toggle("on", !!(t && t.running));
+  timerEl.book.disabled = !!t;
+
+  if (!t) timerEl.sub.textContent = "aperte, leia, e o tempo se registra sozinho";
+  else if (t.running) timerEl.sub.innerHTML = `<span class="pulse"></span>lendo agora`;
+  else timerEl.sub.textContent = "pausado";
+
+  document.title = (t && t.running)
+    ? `▶ ${fmtClock(elapsedMs())} · Biblioteca`
+    : "Biblioteca — sistema de leitura";
+
+  const b = [];
+  if (!t) b.push(`<button class="btn primary" type="button" data-timer="start">Iniciar leitura</button>`);
+  else if (t.running) {
+    b.push(`<button class="btn" type="button" data-timer="pause">Pausar</button>`);
+    b.push(`<button class="btn primary" type="button" data-timer="finish">Encerrar</button>`);
+  } else {
+    b.push(`<button class="btn primary" type="button" data-timer="resume">Retomar</button>`);
+    b.push(`<button class="btn" type="button" data-timer="finish">Encerrar</button>`);
+    b.push(`<button class="btn ghost" type="button" data-timer="cancel">Descartar</button>`);
+  }
+  timerEl.btns.innerHTML = b.join("");
+
+  clearInterval(tickHandle);
+  if (t && t.running) tickHandle = setInterval(paintTimer, 1000);
+}
+
+function startTimer() {
+  const bookId = timerEl.book.value;
+  if (!bookId) return toast("Cadastre um livro primeiro (aba Estante).");
+  state.timer = { bookId, startedAt: Date.now(), accumulated: 0, running: true };
+  hidePending();
+  save(); paintTimer();
+}
+function pauseTimer() {
+  const t = state.timer; if (!t || !t.running) return;
+  t.accumulated = elapsedMs(); t.running = false; t.startedAt = null;
+  save(); paintTimer();
+}
+function resumeTimer() {
+  const t = state.timer; if (!t || t.running) return;
+  t.startedAt = Date.now(); t.running = true;
+  save(); paintTimer();
+}
+function cancelTimer(msg = "Cronômetro descartado.") {
+  state.timer = null; save(); paintTimer(); toast(msg);
+}
+function finishTimer() {
+  const t = state.timer; if (!t) return;
+  const ms = elapsedMs();
+  const minutes = Math.round(ms / 60000);
+  const book = bookById(t.bookId);
+
+  state.timer = null; save(); paintTimer();
+
+  if (!book) return toast("O livro dessa sessão não existe mais.");
+  if (minutes < 1) return toast("Menos de um minuto — não registrei.");
+
+  const { rate, base } = pagesPerMinute(book.id);
+  const guess = Math.max(1, Math.round(rate * minutes));
+
+  pendingSession = { bookId: book.id, minutes, guess };
+  const total = book.pages || 0;
+  const absolute = total > 0;
+
+  timerEl.msg.innerHTML = `<b>${minutes} min</b> em ${esc(book.title)}. Confira as páginas e registre.`;
+  timerEl.stopLabel.textContent = absolute ? "Parei na página" : "Páginas lidas";
+  timerEl.stop.value = absolute ? Math.min(total, (book.current || 0) + guess) : guess;
+  timerEl.hint.textContent = absolute
+    ? `Sugestão: ${guess} páginas a mais que a ${book.current || 0} — por ${base}. Ajuste se errei.`
+    : `Sugestão de ${guess} páginas por ${base}. Ajuste se errei.`;
+  timerEl.done.hidden = false;
+  timerEl.stop.focus();
+  timerEl.stop.select();
+}
+function hidePending() { pendingSession = null; timerEl.done.hidden = true; }
+
+function savePending() {
+  if (!pendingSession) return;
+  const book = bookById(pendingSession.bookId);
+  if (!book) { hidePending(); return toast("O livro dessa sessão não existe mais."); }
+  const v = +timerEl.stop.value || 0;
+  const absolute = !!book.pages;
+  logSession({
+    bookId: book.id,
+    date: todayISO(),
+    stopPage: absolute ? v : "",
+    pages: absolute ? 0 : v,
+    minutes: pendingSession.minutes
+  });
+  hidePending();
+}
+
+timerEl.btns.addEventListener("click", e => {
+  const act = (e.target.closest("[data-timer]") || {}).dataset;
+  if (!act) return;
+  ({ start: startTimer, pause: pauseTimer, resume: resumeTimer, finish: finishTimer, cancel: cancelTimer })[act.timer]();
+});
+document.getElementById("tSave").addEventListener("click", savePending);
+document.getElementById("tDiscard").addEventListener("click", () => { hidePending(); toast("Sessão descartada."); });
+timerEl.stop.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); savePending(); } });
+
+// volta de segundo plano: repinta na hora, sem esperar o próximo tique
+document.addEventListener("visibilitychange", () => { if (!document.hidden) paintTimer(); });
 
 /* =======================================================================
    Render — Hoje
@@ -725,15 +921,18 @@ function renderToday() {
   document.getElementById("headStreak").innerHTML =
     `🔥 <b>${streak}</b> dia${streak === 1 ? "" : "s"} · <b>${t.pages}</b>/${goal} págs hoje`;
 
-  // seletor de livros do formulário
-  const sel = document.getElementById("sBook");
-  const keep = sel.value;
+  // seletores de livro (formulário manual e cronômetro)
   const order = { lendo: 0, fila: 1, abandonado: 2, lido: 3 };
   const opts = [...state.books].sort((a, b) => (order[a.status] - order[b.status]) || a.title.localeCompare(b.title));
-  sel.innerHTML = opts.length
+  const html = opts.length
     ? opts.map(b => `<option value="${b.id}">${esc(b.title)}${b.status === "lendo" ? "" : ` — ${statusLabel(b.status)}`}</option>`).join("")
     : `<option value="">— cadastre um livro na Estante —</option>`;
-  if (opts.some(b => b.id === keep)) sel.value = keep;
+  for (const [el, forced] of [[document.getElementById("sBook"), null],
+                              [timerEl.book, state.timer && state.timer.bookId]]) {
+    const keep = forced || el.value;
+    el.innerHTML = html;
+    if (opts.some(b => b.id === keep)) el.value = keep;
+  }
 
   // lendo agora
   const reading = state.books.filter(b => b.status === "lendo")
@@ -1188,7 +1387,7 @@ function renderNotes() {
 /* =======================================================================
    Render geral + utilidades de UI
    ======================================================================= */
-function renderAll() { renderToday(); renderShelf(); renderStats(); renderNotes(); }
+function renderAll() { renderToday(); renderShelf(); renderStats(); renderNotes(); paintTimer(); }
 
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -1390,6 +1589,8 @@ document.getElementById("importFile").addEventListener("change", e => {
       if (!Array.isArray(data.books) || !Array.isArray(data.sessions)) throw new Error("formato");
       if (!confirm("Isso substitui os dados atuais. Continuar?")) return;
       state = Object.assign(defaultState(), data, { settings: Object.assign(defaultState().settings, data.settings || {}) });
+      if (state.timer && !bookById(state.timer.bookId)) state.timer = null;
+      hidePending();
       save(); applyTheme(); syncSettingsInputs(); renderAll(); toast("Dados importados.");
     } catch (err) { toast("Arquivo inválido."); }
   };
@@ -1398,7 +1599,7 @@ document.getElementById("importFile").addEventListener("change", e => {
 });
 document.getElementById("resetBtn").addEventListener("click", () => {
   if (!confirm("Apagar TODOS os livros, sessões e anotações? Isso não tem volta.")) return;
-  state = defaultState(); save(); syncSettingsInputs(); renderAll(); toast("Tudo apagado.");
+  state = defaultState(); hidePending(); save(); syncSettingsInputs(); renderAll(); toast("Tudo apagado.");
 });
 document.getElementById("seedBtn").addEventListener("click", () => {
   if (state.books.length && !confirm("Isso adiciona livros e sessões de exemplo aos seus dados. Continuar?")) return;
@@ -1454,7 +1655,11 @@ function syncSettingsInputs() {
 }
 applyTheme();
 syncSettingsInputs();
+
+// cronômetro que ficou de outra sessão: só sobrevive se o livro ainda existe
+if (state.timer && !bookById(state.timer.bookId)) state.timer = null;
 renderAll();
+paintTimer();
 
 // atalho do ícone do app (manifest → shortcuts) e links diretos: ?v=hoje
 const wanted = new URLSearchParams(location.search).get("v");
