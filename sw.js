@@ -4,7 +4,7 @@
    - estáticos (ícones, manifest): cache primeiro, revalidando por trás
    - Open Library: sempre rede, nunca cache (metadados não são do app) */
 
-const VERSION = "biblioteca-v2";
+const VERSION = "biblioteca-v3";
 const SHELL = [
   "./",
   "./index.html",
@@ -57,19 +57,40 @@ self.addEventListener("fetch", event => {
     return;
   }
 
-  // Estáticos: responde do cache e atualiza em segundo plano.
+  // Imagens: cache primeiro, revalidando por trás. Mudam pouco e pesam.
+  if (req.destination === "image") {
+    event.respondWith(
+      caches.match(req).then(cached => {
+        const network = fetch(req)
+          .then(res => {
+            if (res && res.ok) {
+              const copy = res.clone();
+              caches.open(VERSION).then(c => c.put(req, copy));
+            }
+            return res;
+          })
+          .catch(() => cached);
+        return cached || network;
+      })
+    );
+    return;
+  }
+
+  // Código (js, css, json): rede primeiro, cache só como rede de segurança.
+  //
+  // Cache primeiro aqui causa desencontro de versão: o index.html vem novo da
+  // rede e os scripts vêm velhos do cache, então o HTML novo chama código que
+  // não existe mais. Sem etapa de build para versionar os nomes dos arquivos,
+  // ir à rede primeiro é o que garante que tudo venha do mesmo deploy.
   event.respondWith(
-    caches.match(req).then(cached => {
-      const network = fetch(req)
-        .then(res => {
-          if (res && res.ok) {
-            const copy = res.clone();
-            caches.open(VERSION).then(c => c.put(req, copy));
-          }
-          return res;
-        })
-        .catch(() => cached);
-      return cached || network;
-    })
+    fetch(req)
+      .then(res => {
+        if (res && res.ok) {
+          const copy = res.clone();
+          caches.open(VERSION).then(c => c.put(req, copy));
+        }
+        return res;
+      })
+      .catch(() => caches.match(req))
   );
 });

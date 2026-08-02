@@ -238,5 +238,21 @@
     } catch (err) { aviso("Falhou: " + err.message, "erro"); }
   });
 
-  if (Supa.session) carregaPerfil();
+  /* Chegou de volta de um link de confirmação, recuperação ou OAuth. */
+  (async () => {
+    const r = await Supa.captureFromUrl();
+    if (!r) { if (Supa.session) carregaPerfil(); return; }
+
+    if (r.error) {
+      dlg.showModal();
+      aviso(r.error, "erro");
+      return;
+    }
+    await carregaPerfil();
+    toast(r.type === "signup" ? "E-mail confirmado. Bem-vindo!" : "Você entrou.");
+    if (r.type === "signup") {
+      dlg.showModal();
+      aviso("Conta confirmada. Escolha seu @ e envie seus dados para a conta.", "ok");
+    }
+  })();
 })();

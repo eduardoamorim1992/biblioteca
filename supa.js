@@ -96,7 +96,45 @@ const Supa = (() => {
   const qs = params => Object.entries(params)
     .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join("&");
 
+  /* Confirmação de e-mail, link mágico e OAuth voltam com a sessão no fragmento
+     da URL (#access_token=...). Guardamos e limpamos a barra de endereços na
+     hora: token em URL vaza por histórico, por print e por "copiar link". */
+  async function captureFromUrl() {
+    const hash = location.hash || "";
+    if (hash.length < 2) return null;
+    const p = new URLSearchParams(hash.slice(1));
+    const limpaUrl = () => history.replaceState(null, "", location.pathname + location.search);
+
+    if (p.get("error") || p.get("error_description")) {
+      const erro = p.get("error_description") || p.get("error");
+      limpaUrl();
+      return { error: decodeURIComponent(erro.replace(/\+/g, " ")) };
+    }
+
+    const access_token = p.get("access_token");
+    if (!access_token) return null;
+
+    store({
+      access_token,
+      refresh_token: p.get("refresh_token"),
+      expires_in: +p.get("expires_in") || 3600
+    });
+    limpaUrl();
+
+    try {
+      const user = await raw("/auth/v1/user", { token: access_token });
+      session.user = user;
+      localStorage.setItem(AUTH_KEY, JSON.stringify(session));
+      emit();
+      return { ok: true, type: p.get("type") || "login" };
+    } catch (e) {
+      store(null);                       // token da URL não vale: não fingir que entrou
+      return { error: "Esse link expirou ou já foi usado. Entre com e-mail e senha." };
+    }
+  }
+
   return {
+    captureFromUrl,
     ready,
     onChange(fn) { listeners.add(fn); fn(session); return () => listeners.delete(fn); },
     get session() { return session; },
