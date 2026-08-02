@@ -281,13 +281,42 @@
   });
 
   $("btnEsqueci").addEventListener("click", async () => {
+    const btn = $("btnEsqueci");
     const email = $("inEmail").value.trim();
     if (!emailValido(email)) return aviso("Digite seu e-mail no campo acima e clique de novo.", "erro");
+    btn.disabled = true;
+    aviso("Enviando o link para " + email + "…");     // feedback antes da ida ao servidor
     try {
       await Supa.resetPassword(email, location.origin + location.pathname);
-      aviso(`Se existir conta com ${email}, o link de recuperação chegou por e-mail.`, "ok");
-    } catch (err) { aviso(err.message, "erro"); }
+      aviso(`Link enviado para ${email}. Confira a caixa de entrada e o spam — pode levar um minuto.`, "ok");
+    } catch (err) {
+      const m = err.message || "";
+      aviso(/rate|limit|seconds/i.test(m)
+        ? "Muitos pedidos seguidos. Espere alguns minutos e tente de novo."
+        : "Não consegui enviar: " + m, "erro");
+    } finally { btn.disabled = false; }
   });
+
+  /* Saída de emergência para cache preso: apaga service worker e caches e
+     recarrega buscando tudo de novo. Sem isso, código velho vira impasse. */
+  $("btnAtualizar").addEventListener("click", async () => {
+    const btn = $("btnAtualizar");
+    btn.disabled = true;
+    aviso("Limpando cache e recarregando…");
+    try {
+      if ("serviceWorker" in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map(r => r.unregister()));
+      }
+      if ("caches" in window) {
+        const ks = await caches.keys();
+        await Promise.all(ks.map(k => caches.delete(k)));
+      }
+    } catch (e) { console.warn(e); }
+    location.replace(location.pathname + "?atualizado=" + Date.now());
+  });
+
+  $("appVersion").textContent = (typeof APP_VERSION !== "undefined" ? APP_VERSION : "desconhecida");
 
   $("btnSair").addEventListener("click", async () => {
     await Supa.signOut();
