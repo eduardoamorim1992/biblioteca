@@ -1918,8 +1918,22 @@ if (["hoje", "estante", "progresso", "notas"].includes(wanted)) openView(wanted,
 
 // offline: só faz sentido servido por http(s); em file:// o navegador nem registra
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+  /* Quando um service worker novo assume, o HTML já carregado pode estar
+     casado com scripts da versão anterior — HTML novo chamando código velho,
+     ou o contrário. Em vez de deixar o app meio quebrado e silencioso,
+     recarrega uma vez para que tudo venha do mesmo deploy. */
+  const jaTinhaControlador = !!navigator.serviceWorker.controller;
+  let recarregando = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!jaTinhaControlador || recarregando) return;   // primeira instalação não precisa
+    recarregando = true;
+    location.reload();
+  });
+
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("sw.js").catch(e => console.warn("SW não registrado:", e));
+    navigator.serviceWorker.register("sw.js")
+      .then(reg => reg.update())
+      .catch(e => console.warn("SW não registrado:", e));
   });
 }
 </script>
