@@ -14,6 +14,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Biblioteca">
 <meta name="mobile-web-app-capable" content="yes">
+<script src="config.js"></script>
+<script src="supa.js"></script>
 <style>
 /* ---------- tokens ---------- */
 :root{
@@ -273,6 +275,30 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;padding-right:0}
 }
 #toast.on{opacity:1;transform:translate(-50%,0)}
 
+/* ---------- conta ---------- */
+dialog#authDlg{
+  border:1px solid var(--border);border-radius:16px;padding:0;background:var(--surface);color:var(--text);
+  width:min(440px,92vw);box-shadow:0 20px 60px rgba(0,0,0,.28);
+}
+dialog#authDlg::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(3px)}
+.dlg-head{display:flex;align-items:center;gap:10px;padding:16px 18px;border-bottom:1px solid var(--border)}
+.dlg-head h2{flex:1}
+.dlg-body{padding:18px}
+.auth-tabs{display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--border)}
+.auth-tabs button{
+  appearance:none;background:none;border:0;border-bottom:2px solid transparent;
+  padding:8px 12px;cursor:pointer;color:var(--text-2);font-size:14px;font-weight:550;
+}
+.auth-tabs button[aria-selected="true"]{color:var(--text);border-bottom-color:var(--accent)}
+.auth-msg{margin-top:12px;font-size:13px;padding:9px 11px;border-radius:9px;background:var(--surface-2);color:var(--text-2)}
+.auth-msg.erro{background:rgba(208,59,59,.12);color:var(--critical)}
+.auth-msg.ok{background:rgba(12,163,12,.12);color:var(--good-text)}
+.stack{display:flex;flex-direction:column;gap:12px}
+.check{display:flex;gap:9px;align-items:flex-start;font-size:13px;color:var(--text-2)}
+.check input{width:auto;margin-top:2px;flex:none}
+.dlg-sep{height:1px;background:var(--border);margin:18px 0}
+.dlg-note{font-size:12px;color:var(--muted);line-height:1.5}
+
 .section{display:none}
 .section.on{display:block}
 .sep{height:1px;background:var(--border);margin:16px 0}
@@ -286,6 +312,7 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;padding-right:0}
     <div class="brand"><span class="dot"></span> Biblioteca</div>
     <div class="head-spacer"></div>
     <div class="streak-pill" id="headStreak"></div>
+    <button class="btn sm" id="accountBtn">Entrar</button>
     <button class="icon-btn" id="themeBtn" title="Alternar tema" aria-label="Alternar tema">◐</button>
   </div>
   <nav class="tabs" role="tablist">
@@ -560,6 +587,96 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;padding-right:0}
   </section>
 
 </div>
+
+<dialog id="authDlg">
+  <div class="dlg-head">
+    <h2>Sua conta</h2>
+    <button class="icon-btn" id="authClose" aria-label="Fechar">✕</button>
+  </div>
+  <div class="dlg-body">
+
+    <div id="authForms">
+      <div class="auth-tabs" role="tablist">
+        <button type="button" role="tab" data-authtab="entrar" aria-selected="true">Entrar</button>
+        <button type="button" role="tab" data-authtab="criar" aria-selected="false">Criar conta</button>
+      </div>
+
+      <form id="formEntrar" class="stack" autocomplete="on">
+        <div class="field">
+          <label for="inEmail">E-mail</label>
+          <input type="email" id="inEmail" required autocomplete="email">
+        </div>
+        <div class="field">
+          <label for="inSenha">Senha</label>
+          <input type="password" id="inSenha" required autocomplete="current-password">
+        </div>
+        <button class="btn primary" type="submit">Entrar</button>
+      </form>
+
+      <form id="formCriar" class="stack" autocomplete="on" hidden>
+        <div class="field">
+          <label for="upNome">Como quer ser chamado</label>
+          <input type="text" id="upNome" required maxlength="60" autocomplete="name">
+        </div>
+        <div class="field">
+          <label for="upEmail">E-mail</label>
+          <input type="email" id="upEmail" required autocomplete="email">
+        </div>
+        <div class="field">
+          <label for="upSenha">Senha <span style="font-weight:400">(mínimo 8 caracteres)</span></label>
+          <input type="password" id="upSenha" required minlength="8" autocomplete="new-password">
+        </div>
+        <button class="btn primary" type="submit">Criar conta</button>
+      </form>
+
+      <p class="dlg-note" style="margin-top:14px">
+        Conta é opcional. Sem ela o app continua funcionando neste navegador, como sempre.
+        Com ela você ganha backup, perfil e ranking.
+      </p>
+    </div>
+
+    <div id="accountPanel" hidden>
+      <p class="dlg-note" id="accountEmail" style="margin-bottom:14px"></p>
+
+      <form id="formPerfil" class="stack">
+        <div class="field">
+          <label for="pUsername">Seu @ <span style="font-weight:400">(3 a 20, letras minúsculas, números e _)</span></label>
+          <input type="text" id="pUsername" pattern="[a-z0-9_]{3,20}" required>
+        </div>
+        <div class="field">
+          <label for="pName">Nome de exibição</label>
+          <input type="text" id="pName" maxlength="60" required>
+        </div>
+        <div class="field">
+          <label for="pBio">Bio</label>
+          <textarea id="pBio" maxlength="280" style="min-height:60px"></textarea>
+        </div>
+        <label class="check">
+          <input type="checkbox" id="pPrivate">
+          <span>Perfil privado — fico fora do ranking e do feed público.</span>
+        </label>
+        <button class="btn primary" type="submit">Salvar perfil</button>
+      </form>
+
+      <div class="dlg-sep"></div>
+
+      <h3 style="margin-bottom:8px">Sincronização</h3>
+      <p class="dlg-note" style="margin-bottom:12px">
+        Manual de propósito: sincronia automática precisa resolver conflito, e
+        conflito resolvido errado apaga leitura registrada.
+      </p>
+      <div class="row" style="gap:8px">
+        <button class="btn" type="button" id="btnEnviar">Enviar para a conta</button>
+        <button class="btn" type="button" id="btnTrazer">Trazer da conta</button>
+      </div>
+
+      <div class="dlg-sep"></div>
+      <button class="btn ghost" type="button" id="btnSair">Sair da conta</button>
+    </div>
+
+    <div class="auth-msg" id="authMsg" hidden></div>
+  </div>
+</dialog>
 
 <div id="toast"></div>
 
@@ -1672,5 +1789,6 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
   });
 }
 </script>
+<script src="account.js"></script>
 </body>
 </html>
