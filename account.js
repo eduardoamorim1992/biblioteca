@@ -164,10 +164,11 @@
   /** Escreve dentro do formulário que está à vista, nunca num rodapé flutuante:
       mensagem fora da área visível é o mesmo que mensagem nenhuma. */
   function aviso(texto, tipo) {
-    const alvo = !telaAberta() ? "acctMsg"
-               : !$("paneNovaSenha").hidden ? "msgNovaSenha"
-               : !$("paneCriar").hidden ? "msgCriar"
-               : "msgEntrar";
+    const alvo = telaAberta() ? (!$("paneNovaSenha").hidden ? "msgNovaSenha"
+                              : !$("paneCriar").hidden ? "msgCriar"
+                              : "msgEntrar")
+               : dlg.open ? "acctMsg"
+               : null;
     for (const id of ["acctMsg", "msgEntrar", "msgCriar", "msgNovaSenha"]) {
       const el = $(id);
       if (!el) continue;
@@ -180,6 +181,9 @@
         el.hidden = true;
       }
     }
+    // Nenhuma das duas superfícies está à vista: escrever no diálogo fechado
+    // seria falar para uma parede. O toast é o que sobra.
+    if (!alvo && texto) toast(texto);
   }
 
   /** Trava o botão enquanto a requisição corre, para não disparar duas vezes. */
@@ -191,13 +195,35 @@
     finally { btn.disabled = false; btn.textContent = rotulo; }
   }
 
+  /* O perfil é enfeite: decide o que aparece no botão da conta. A sessão é o
+     que importa. Falha aqui não pode desfazer uma entrada bem-sucedida — era
+     exatamente isso que expulsava o usuário de volta para a tela de entrada,
+     em silêncio, logo depois de ele acertar a senha. */
   async function carregaPerfil() {
-    try { perfil = await Supa.myProfile(); } catch (e) { perfil = null; }
+    try {
+      perfil = await Supa.myProfile();
+    } catch (e) {
+      perfil = null;
+      console.warn("perfil não carregou:", e);
+      if (Supa.session) toast("Você entrou, mas o perfil não carregou: " + e.message);
+    }
     pinta(Supa.session);
   }
 
+  // Sessão perdida sem o usuário pedir: diga o porquê. Tela de entrada que
+  // reaparece sozinha e muda é indistinguível de "cliquei e não aconteceu nada".
+  const PORQUE_SAIU = { expirou: "Sua sessão expirou. Entre de novo." };
+
   // Sair devolve para a tela de entrada: sem conta, não há app.
-  Supa.onChange(s => { if (!s) { perfil = null; abreTela("entrar"); } pinta(s); });
+  Supa.onChange((s, motivo) => {
+    if (!s) {
+      perfil = null;
+      if (dlg.open) dlg.close();
+      abreTela("entrar");
+      if (PORQUE_SAIU[motivo]) aviso(PORQUE_SAIU[motivo], "erro");
+    }
+    pinta(s);
+  });
 
   // Fora da conta abre a tela de entrada; dentro, o painel da conta.
   $("accountBtn").addEventListener("click", async () => {
@@ -232,14 +258,18 @@
     aviso("");
     try {
       await comEspera(e.target, "Entrando…", () => Supa.signIn(email, senha));
-      await carregaPerfil();
-      toast("Bem-vindo de volta.");
     } catch (err) {
       const m = err.message || "";
       aviso(m === "Invalid login credentials" ? "E-mail ou senha incorretos."
           : /Email not confirmed/i.test(m) ? "Confirme o e-mail antes de entrar — o link foi para sua caixa."
-          : m, "erro");
+          : /Failed to fetch|NetworkError|load failed/i.test(m)
+            ? "Não consegui falar com o servidor. Confira a conexão e tente de novo."
+            : m || "Não consegui entrar, e o servidor não disse por quê.", "erro");
+      return;
     }
+    // Daqui para baixo o usuário JÁ está dentro. Nada aqui pode expulsá-lo.
+    toast("Bem-vindo de volta.");
+    carregaPerfil();
   });
 
   $("formCriar").addEventListener("submit", async e => {

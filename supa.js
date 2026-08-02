@@ -17,9 +17,12 @@ const Supa = (() => {
   try { session = JSON.parse(localStorage.getItem(AUTH_KEY) || "null"); } catch (e) { session = null; }
 
   const listeners = new Set();
-  const emit = () => listeners.forEach(fn => { try { fn(session); } catch (e) { console.error(e); } });
+  /* O motivo viaja junto com a mudança: quem perde a sessão precisa saber se
+     saiu por vontade própria ou se foi expulso — sem isso, a tela de entrada
+     reaparece do nada e o usuário fica sem explicação. */
+  const emit = motivo => listeners.forEach(fn => { try { fn(session, motivo); } catch (e) { console.error(e); } });
 
-  function store(s) {
+  function store(s, motivo) {
     if (s && s.access_token) {
       session = {
         access_token: s.access_token,
@@ -33,7 +36,7 @@ const Supa = (() => {
       session = null;
       localStorage.removeItem(AUTH_KEY);
     }
-    emit();
+    emit(motivo);
     return session;
   }
 
@@ -67,16 +70,26 @@ const Supa = (() => {
     return parsed;
   }
 
+  /* Renova o token. Só derruba a sessão quando o servidor RECUSA o refresh
+     token — aí ela morreu mesmo. Falha de rede, 500 ou timeout não são motivo
+     para expulsar ninguém: quem apaga a sessão por causa de wi-fi ruim faz o
+     usuário digitar a senha certa e voltar para a tela de entrada calado. */
   async function refresh() {
-    if (!session || !session.refresh_token) return null;
+    if (!session || !session.refresh_token) {
+      store(null, "expirou");
+      throw new Error("Sua sessão terminou. Entre de novo.");
+    }
     try {
       const s = await raw("/auth/v1/token?grant_type=refresh_token", {
         method: "POST", body: { refresh_token: session.refresh_token }
       });
       return store(s);
     } catch (e) {
-      store(null);                       // refresh token morto: sessão acabou
-      throw e;
+      if (e.status === 400 || e.status === 401 || e.status === 403) {
+        store(null, "expirou");          // refresh token morto: sessão acabou
+        throw new Error("Sua sessão expirou. Entre de novo.");
+      }
+      throw e;                           // rede/servidor: sessão continua de pé
     }
   }
 
@@ -87,10 +100,25 @@ const Supa = (() => {
     try {
       return await raw(path, Object.assign({}, opts, { token: session.access_token }));
     } catch (e) {
-      if (e.status !== 401) throw e;
-      await refresh();                   // token recusado antes da hora prevista
+      // 401 aqui pode ser token vencido antes da hora — ou pode ser problema da
+      // própria tabela. Renovar só faz sentido no primeiro caso; nos outros,
+      // renovar em vão gastava o refresh token e derrubava a sessão à toa.
+      //
+      // Token recém-emitido não vence: se ele acabou de sair do login e mesmo
+      // assim tomou 401, o problema é do outro lado. Renovar aí era o que
+      // apagava a sessão de quem tinha ACABADO de entrar com a senha certa.
+      const perto = Date.now() >= session.expires_at - 5 * 60 * 1000;
+      if (e.status !== 401 || !perto || !ehProblemaDeToken(e)) throw e;
+      await refresh();
       return raw(path, Object.assign({}, opts, { token: session.access_token }));
     }
+  }
+
+  /** O PostgREST responde 401 tanto para "seu token venceu" quanto para outras
+      recusas. Estas marcas são as do token. */
+  function ehProblemaDeToken(e) {
+    const txt = `${(e && e.code) || ""} ${(e && e.message) || ""}`;
+    return /PGRST30|jwt|token|expired|invalid claim|not authenticated/i.test(txt);
   }
 
   const qs = params => Object.entries(params)
@@ -160,7 +188,7 @@ const Supa = (() => {
 
     async signOut() {
       try { await auth("/auth/v1/logout", { method: "POST" }); } catch (e) { /* sair sempre funciona localmente */ }
-      store(null);
+      store(null, "saiu");
     },
 
     /** Troca a senha do usuário já autenticado (inclusive por link de recuperação). */
