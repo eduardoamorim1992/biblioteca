@@ -121,16 +121,34 @@
     return { livros: state.books.length, sessoes: state.sessions.length, notas: state.notes.length };
   }
 
-  /* -------------------------------------------------------------------- UI */
+  /* -------------------------------------------------------------------- UI
+     Duas superfícies distintas: a tela cheia de entrada, para quem está de
+     fora, e o diálogo de conta, para quem já está dentro. Nunca as duas. */
   const dlg = $("authDlg");
+  const view = $("authView");
   let perfil = null;
+
+  const telaAberta = () => !view.hidden;
+
+  function abreTela(qual = "entrar") {
+    $("paneEntrar").hidden = qual !== "entrar";
+    $("paneCriar").hidden = qual !== "criar";
+    view.hidden = false;
+    document.body.style.overflow = "hidden";
+    aviso("");
+    setTimeout(() => { const i = $(qual === "criar" ? "upNome" : "inEmail"); i && i.focus(); }, 60);
+  }
+  function fechaTela() {
+    view.hidden = true;
+    document.body.style.overflow = "";
+    aviso("");
+  }
 
   function pinta(sessao) {
     const btn = $("accountBtn");
     btn.textContent = sessao ? (perfil ? "@" + perfil.username : "conta") : "Entrar";
     btn.classList.toggle("primary", !sessao);
-    $("authForms").hidden = !!sessao;
-    $("accountPanel").hidden = !sessao;
+    if (sessao) fechaTela();
     if (sessao && perfil) {
       $("pUsername").value = perfil.username || "";
       $("pName").value = perfil.display_name || "";
@@ -140,11 +158,24 @@
     }
   }
 
+  /** Escreve na superfície que está aberta — tela de entrada ou diálogo. */
   function aviso(texto, tipo) {
-    const el = $("authMsg");
+    const el = $(telaAberta() ? "authMsg" : "acctMsg");
+    const outro = $(telaAberta() ? "acctMsg" : "authMsg");
+    outro.hidden = true;
     el.textContent = texto || "";
     el.hidden = !texto;
     el.className = "auth-msg" + (tipo ? " " + tipo : "");
+    if (telaAberta()) el.style.cssText = "max-width:376px;width:100%;position:absolute;bottom:24px;left:50%;transform:translateX(-50%)";
+  }
+
+  /** Trava o botão enquanto a requisição corre, para não disparar duas vezes. */
+  async function comEspera(form, texto, fn) {
+    const btn = form.querySelector("button[type=submit]");
+    const rotulo = btn.textContent;
+    btn.disabled = true; btn.textContent = texto;
+    try { return await fn(); }
+    finally { btn.disabled = false; btn.textContent = rotulo; }
   }
 
   async function carregaPerfil() {
@@ -154,47 +185,75 @@
 
   Supa.onChange(s => { if (!s) { perfil = null; } pinta(s); });
 
+  // Fora da conta abre a tela de entrada; dentro, o painel da conta.
   $("accountBtn").addEventListener("click", async () => {
     if (!Supa.ready) return toast("Backend não configurado.");
-    aviso("");
-    dlg.showModal();
-    if (Supa.session && !perfil) await carregaPerfil();
+    if (Supa.session) {
+      dlg.showModal();
+      if (!perfil) await carregaPerfil();
+    } else {
+      abreTela("entrar");
+    }
   });
   $("authClose").addEventListener("click", () => dlg.close());
+  $("authSkip").addEventListener("click", fechaTela);
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && telaAberta()) fechaTela(); });
 
-  document.querySelectorAll("[data-authtab]").forEach(t => t.addEventListener("click", () => {
-    const alvo = t.dataset.authtab;
-    document.querySelectorAll("[data-authtab]").forEach(x => x.setAttribute("aria-selected", String(x === t)));
-    $("formEntrar").hidden = alvo !== "entrar";
-    $("formCriar").hidden = alvo !== "criar";
-    aviso("");
+  document.querySelectorAll("[data-goto]").forEach(b =>
+    b.addEventListener("click", () => abreTela(b.dataset.goto)));
+
+  document.querySelectorAll("[data-eye]").forEach(b => b.addEventListener("click", () => {
+    const campo = $(b.dataset.eye);
+    const escondida = campo.type === "password";
+    campo.type = escondida ? "text" : "password";
+    b.textContent = escondida ? "ocultar" : "mostrar";
+    campo.focus();
   }));
+
+  const emailValido = v => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v);
 
   $("formEntrar").addEventListener("submit", async e => {
     e.preventDefault();
-    aviso("Entrando…");
+    const email = $("inEmail").value.trim(), senha = $("inSenha").value;
+    if (!emailValido(email)) return aviso("Confira o e-mail digitado.", "erro");
+    if (!senha) return aviso("Digite sua senha.", "erro");
+    aviso("");
     try {
-      await Supa.signIn($("inEmail").value.trim(), $("inSenha").value);
+      await comEspera(e.target, "Entrando…", () => Supa.signIn(email, senha));
       await carregaPerfil();
-      aviso("");
       toast("Bem-vindo de volta.");
     } catch (err) {
-      aviso(err.message === "Invalid login credentials" ? "E-mail ou senha incorretos." : err.message, "erro");
+      const m = err.message || "";
+      aviso(m === "Invalid login credentials" ? "E-mail ou senha incorretos."
+          : /Email not confirmed/i.test(m) ? "Confirme o e-mail antes de entrar — o link foi para sua caixa."
+          : m, "erro");
     }
   });
 
   $("formCriar").addEventListener("submit", async e => {
     e.preventDefault();
-    const senha = $("upSenha").value;
+    const nome = $("upNome").value.trim(), email = $("upEmail").value.trim(), senha = $("upSenha").value;
+    if (!nome) return aviso("Diga como quer ser chamado.", "erro");
+    if (!emailValido(email)) return aviso("Confira o e-mail digitado.", "erro");
     if (senha.length < 8) return aviso("A senha precisa de pelo menos 8 caracteres.", "erro");
-    aviso("Criando conta…");
+    aviso("");
     try {
-      const r = await Supa.signUp($("upEmail").value.trim(), senha, $("upNome").value.trim());
-      if (r.session) { await carregaPerfil(); aviso(""); toast("Conta criada."); }
+      const r = await comEspera(e.target, "Criando…", () => Supa.signUp(email, senha, nome));
+      if (r.session) { await carregaPerfil(); toast("Conta criada."); }
       else aviso(`Enviamos um e-mail de confirmação para ${r.email}. Confirme e depois entre.`, "ok");
     } catch (err) {
-      aviso(err.message, "erro");
+      const m = err.message || "";
+      aviso(/already registered/i.test(m) ? "Esse e-mail já tem conta. Tente entrar." : m, "erro");
     }
+  });
+
+  $("btnEsqueci").addEventListener("click", async () => {
+    const email = $("inEmail").value.trim();
+    if (!emailValido(email)) return aviso("Digite seu e-mail no campo acima e clique de novo.", "erro");
+    try {
+      await Supa.resetPassword(email, location.origin + location.pathname);
+      aviso(`Se existir conta com ${email}, o link de recuperação chegou por e-mail.`, "ok");
+    } catch (err) { aviso(err.message, "erro"); }
   });
 
   $("btnSair").addEventListener("click", async () => {
@@ -244,7 +303,7 @@
     if (!r) { if (Supa.session) carregaPerfil(); return; }
 
     if (r.error) {
-      dlg.showModal();
+      abreTela("entrar");
       aviso(r.error, "erro");
       return;
     }

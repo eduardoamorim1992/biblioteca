@@ -275,6 +275,91 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;padding-right:0}
 }
 #toast.on{opacity:1;transform:translate(-50%,0)}
 
+/* ---------- tela de entrada ---------- */
+.auth-screen{
+  position:fixed;inset:0;z-index:200;display:grid;grid-template-columns:1.05fr 1fr;
+  background:var(--bg);animation:authIn .22s ease-out;
+}
+@keyframes authIn{from{opacity:0}to{opacity:1}}
+@media(prefers-reduced-motion:reduce){.auth-screen{animation:none}}
+@media(max-width:860px){.auth-screen{grid-template-columns:1fr}}
+
+.auth-brand{
+  position:relative;overflow:hidden;color:#fff;
+  background:linear-gradient(150deg,#3987e5 0%,#2a78d6 45%,#1c5cab 100%);
+  padding:clamp(32px,5vw,64px);display:flex;flex-direction:column;justify-content:center;gap:22px;
+}
+@media(max-width:860px){.auth-brand{display:none}}
+.auth-brand:after{
+  content:"";position:absolute;right:-90px;bottom:-110px;width:340px;height:340px;
+  border-radius:50%;background:rgba(255,255,255,.07);
+}
+.auth-mark{width:56px;height:56px;position:relative;z-index:1}
+.auth-brand h2{font-size:clamp(26px,3.2vw,38px);line-height:1.15;letter-spacing:-.03em;position:relative;z-index:1;max-width:12ch}
+.auth-brand p{font-size:15px;line-height:1.6;color:rgba(255,255,255,.86);max-width:38ch;position:relative;z-index:1}
+.auth-points{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:11px;position:relative;z-index:1}
+.auth-points li{display:flex;gap:11px;align-items:flex-start;font-size:14.5px;color:rgba(255,255,255,.94)}
+.auth-points b{display:block;font-weight:620}
+.auth-points span{color:rgba(255,255,255,.72);font-size:13px}
+.auth-points .tick{
+  flex:none;width:21px;height:21px;border-radius:50%;background:rgba(255,255,255,.18);
+  display:grid;place-items:center;font-size:11px;margin-top:1px;
+}
+
+.auth-panel{
+  position:relative;display:flex;align-items:center;justify-content:center;
+  padding:clamp(24px,4vw,48px);overflow-y:auto;
+}
+.auth-pane{width:100%;max-width:376px;animation:paneIn .2s ease-out}
+@keyframes paneIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.auth-pane{animation:none}}
+.auth-pane h1{font-size:28px;letter-spacing:-.03em;font-weight:680}
+.auth-lead{color:var(--text-2);font-size:14.5px;margin-top:7px;margin-bottom:26px}
+.auth-x{
+  position:absolute;top:18px;right:18px;appearance:none;border:1px solid var(--border);
+  background:var(--surface);color:var(--text-2);border-radius:9px;padding:7px 13px;
+  cursor:pointer;font-size:13px;font-weight:550;
+}
+.auth-x:hover{color:var(--text);background:var(--surface-2)}
+.auth-mob{display:none;align-items:center;gap:10px;margin-bottom:26px;font-weight:680;font-size:17px;letter-spacing:-.02em}
+.auth-mob .m{width:30px;height:30px}
+@media(max-width:860px){.auth-mob{display:flex}}
+
+.auth-field{margin-bottom:15px}
+.auth-field label{display:block;font-size:13px;font-weight:600;color:var(--text-2);margin-bottom:7px}
+.auth-field input{
+  height:46px;border-radius:11px;padding:0 14px;font-size:15px;
+  background:var(--surface);border:1px solid var(--border);
+}
+:root[data-theme="dark"] .auth-field input{background:var(--surface-2)}
+.auth-field .wrap-pw{position:relative}
+.auth-field .wrap-pw input{padding-right:52px}
+.auth-eye{
+  position:absolute;right:6px;top:50%;transform:translateY(-50%);
+  appearance:none;background:none;border:0;cursor:pointer;color:var(--muted);
+  font-size:12px;font-weight:600;padding:8px 10px;border-radius:8px;
+}
+.auth-eye:hover{color:var(--text);background:var(--surface-2)}
+.auth-hint{font-size:12px;color:var(--muted);margin-top:6px}
+.auth-go{
+  width:100%;height:47px;border-radius:11px;border:0;cursor:pointer;
+  background:var(--accent);color:#fff;font-size:15px;font-weight:640;margin-top:9px;
+  transition:filter .12s,transform .06s;
+}
+.auth-go:hover{filter:brightness(1.08)}
+.auth-go:active{transform:translateY(1px)}
+.auth-go[disabled]{opacity:.6;cursor:progress}
+.auth-switch{
+  margin-top:24px;padding-top:20px;border-top:1px solid var(--border);
+  font-size:14px;color:var(--text-2);text-align:center;
+}
+.auth-switch button{
+  appearance:none;background:none;border:0;cursor:pointer;
+  color:var(--accent);font-weight:640;font-size:14px;padding:2px 4px;
+}
+.auth-switch button:hover{text-decoration:underline}
+.auth-legal{margin-top:20px;font-size:11.5px;color:var(--muted);line-height:1.55;text-align:center}
+
 /* ---------- conta ---------- */
 dialog#authDlg{
   border:1px solid var(--border);border-radius:16px;padding:0;background:var(--surface);color:var(--text);
@@ -284,12 +369,6 @@ dialog#authDlg::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(3px)}
 .dlg-head{display:flex;align-items:center;gap:10px;padding:16px 18px;border-bottom:1px solid var(--border)}
 .dlg-head h2{flex:1}
 .dlg-body{padding:18px}
-.auth-tabs{display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--border)}
-.auth-tabs button{
-  appearance:none;background:none;border:0;border-bottom:2px solid transparent;
-  padding:8px 12px;cursor:pointer;color:var(--text-2);font-size:14px;font-weight:550;
-}
-.auth-tabs button[aria-selected="true"]{color:var(--text);border-bottom-color:var(--accent)}
 .auth-msg{margin-top:12px;font-size:13px;padding:9px 11px;border-radius:9px;background:var(--surface-2);color:var(--text-2)}
 .auth-msg.erro{background:rgba(208,59,59,.12);color:var(--critical)}
 .auth-msg.ok{background:rgba(12,163,12,.12);color:var(--good-text)}
@@ -595,47 +674,7 @@ dialog#authDlg::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(3px)}
   </div>
   <div class="dlg-body">
 
-    <div id="authForms">
-      <div class="auth-tabs" role="tablist">
-        <button type="button" role="tab" data-authtab="entrar" aria-selected="true">Entrar</button>
-        <button type="button" role="tab" data-authtab="criar" aria-selected="false">Criar conta</button>
-      </div>
-
-      <form id="formEntrar" class="stack" autocomplete="on">
-        <div class="field">
-          <label for="inEmail">E-mail</label>
-          <input type="email" id="inEmail" required autocomplete="email">
-        </div>
-        <div class="field">
-          <label for="inSenha">Senha</label>
-          <input type="password" id="inSenha" required autocomplete="current-password">
-        </div>
-        <button class="btn primary" type="submit">Entrar</button>
-      </form>
-
-      <form id="formCriar" class="stack" autocomplete="on" hidden>
-        <div class="field">
-          <label for="upNome">Como quer ser chamado</label>
-          <input type="text" id="upNome" required maxlength="60" autocomplete="name">
-        </div>
-        <div class="field">
-          <label for="upEmail">E-mail</label>
-          <input type="email" id="upEmail" required autocomplete="email">
-        </div>
-        <div class="field">
-          <label for="upSenha">Senha <span style="font-weight:400">(mínimo 8 caracteres)</span></label>
-          <input type="password" id="upSenha" required minlength="8" autocomplete="new-password">
-        </div>
-        <button class="btn primary" type="submit">Criar conta</button>
-      </form>
-
-      <p class="dlg-note" style="margin-top:14px">
-        Conta é opcional. Sem ela o app continua funcionando neste navegador, como sempre.
-        Com ela você ganha backup, perfil e ranking.
-      </p>
-    </div>
-
-    <div id="accountPanel" hidden>
+    <div id="accountPanel">
       <p class="dlg-note" id="accountEmail" style="margin-bottom:14px"></p>
 
       <form id="formPerfil" class="stack">
@@ -674,9 +713,101 @@ dialog#authDlg::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(3px)}
       <button class="btn ghost" type="button" id="btnSair">Sair da conta</button>
     </div>
 
-    <div class="auth-msg" id="authMsg" hidden></div>
+    <div class="auth-msg" id="acctMsg" hidden></div>
   </div>
 </dialog>
+
+<div class="auth-screen" id="authView" hidden>
+  <aside class="auth-brand">
+    <svg class="auth-mark" viewBox="0 0 100 100" aria-hidden="true">
+      <path d="M6 24 L44 32 L44 88 L6 78 Z" fill="#fff"/>
+      <path d="M94 24 L56 32 L56 88 L94 78 Z" fill="#fff"/>
+      <path d="M68 29 L80 27 L80 62 L74 56 L68 63 Z" fill="#eb6834"/>
+    </svg>
+    <h2>Sua leitura, em ordem.</h2>
+    <p>Meta diária, fila de livros, cronômetro e estatísticas. O app funciona sozinho no seu navegador — a conta só acrescenta.</p>
+    <ul class="auth-points">
+      <li><span class="tick">✓</span><span><b>Backup na nuvem</b><span>sua estante deixa de depender de um navegador só</span></span></li>
+      <li><span class="tick">✓</span><span><b>Perfil de leitor</b><span>o que você leu no ano, sua sequência, suas resenhas</span></span></li>
+      <li><span class="tick">✓</span><span><b>Ranking</b><span>por páginas, livros ou dias seguidos</span></span></li>
+    </ul>
+  </aside>
+
+  <main class="auth-panel">
+    <button class="auth-x" type="button" id="authSkip">Usar sem conta</button>
+
+    <!-- ---------------- entrar ---------------- -->
+    <section class="auth-pane" id="paneEntrar">
+      <div class="auth-mob">
+        <svg class="m" viewBox="0 0 100 100" aria-hidden="true">
+          <path d="M6 24 L44 32 L44 88 L6 78 Z" fill="var(--accent)"/>
+          <path d="M94 24 L56 32 L56 88 L94 78 Z" fill="var(--accent)"/>
+        </svg> Biblioteca
+      </div>
+      <h1>Entrar</h1>
+      <p class="auth-lead">Bom te ver de novo.</p>
+
+      <form id="formEntrar" autocomplete="on" novalidate>
+        <div class="auth-field">
+          <label for="inEmail">E-mail</label>
+          <input type="email" id="inEmail" required autocomplete="email" placeholder="voce@exemplo.com">
+        </div>
+        <div class="auth-field">
+          <label for="inSenha">Senha</label>
+          <div class="wrap-pw">
+            <input type="password" id="inSenha" required autocomplete="current-password" placeholder="••••••••">
+            <button type="button" class="auth-eye" data-eye="inSenha">mostrar</button>
+          </div>
+          <p class="auth-hint"><button type="button" class="auth-switch-link" id="btnEsqueci"
+             style="background:none;border:0;padding:0;color:var(--accent);cursor:pointer;font-size:12px;font-weight:600">Esqueci minha senha</button></p>
+        </div>
+        <button class="auth-go" type="submit">Entrar</button>
+      </form>
+
+      <p class="auth-switch">Ainda não tem conta? <button type="button" data-goto="criar">Criar conta</button></p>
+    </section>
+
+    <!-- ---------------- criar conta ---------------- -->
+    <section class="auth-pane" id="paneCriar" hidden>
+      <div class="auth-mob">
+        <svg class="m" viewBox="0 0 100 100" aria-hidden="true">
+          <path d="M6 24 L44 32 L44 88 L6 78 Z" fill="var(--accent)"/>
+          <path d="M94 24 L56 32 L56 88 L94 78 Z" fill="var(--accent)"/>
+        </svg> Biblioteca
+      </div>
+      <h1>Criar conta</h1>
+      <p class="auth-lead">Leva menos de um minuto.</p>
+
+      <form id="formCriar" autocomplete="on" novalidate>
+        <div class="auth-field">
+          <label for="upNome">Como quer ser chamado</label>
+          <input type="text" id="upNome" required maxlength="60" autocomplete="name" placeholder="Eduardo">
+        </div>
+        <div class="auth-field">
+          <label for="upEmail">E-mail</label>
+          <input type="email" id="upEmail" required autocomplete="email" placeholder="voce@exemplo.com">
+        </div>
+        <div class="auth-field">
+          <label for="upSenha">Senha</label>
+          <div class="wrap-pw">
+            <input type="password" id="upSenha" required minlength="8" autocomplete="new-password" placeholder="mínimo 8 caracteres">
+            <button type="button" class="auth-eye" data-eye="upSenha">mostrar</button>
+          </div>
+          <p class="auth-hint" id="pwHint">Use pelo menos 8 caracteres.</p>
+        </div>
+        <button class="auth-go" type="submit">Criar conta</button>
+      </form>
+
+      <p class="auth-legal">
+        Você vai receber um e-mail de confirmação antes de conseguir entrar.
+        Guardamos seu e-mail, sua estante e suas leituras — nada além disso.
+      </p>
+      <p class="auth-switch">Já tem conta? <button type="button" data-goto="entrar">Entrar</button></p>
+    </section>
+
+    <div class="auth-msg" id="authMsg" hidden style="max-width:376px;width:100%;position:absolute;bottom:24px;left:50%;transform:translateX(-50%)"></div>
+  </main>
+</div>
 
 <div id="toast"></div>
 
