@@ -163,6 +163,13 @@ const Supa = (() => {
       store(null);
     },
 
+    /** Troca a senha do usuário já autenticado (inclusive por link de recuperação). */
+    async updatePassword(novaSenha) {
+      const user = await auth("/auth/v1/user", { method: "PUT", body: { password: novaSenha } });
+      if (session) { session.user = user; localStorage.setItem(AUTH_KEY, JSON.stringify(session)); }
+      return user;
+    },
+
     async resetPassword(email, redirectTo) {
       return raw("/auth/v1/recover", { method: "POST", body: { email, gotrue_meta_security: {}, redirect_to: redirectTo } });
     },

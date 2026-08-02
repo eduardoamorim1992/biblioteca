@@ -809,6 +809,34 @@ dialog#authDlg::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(3px)}
       <p class="auth-switch">Já tem conta? <button type="button" data-goto="entrar">Entrar</button></p>
     </section>
 
+    <!-- ---------------- nova senha (volta do link de recuperação) ---------------- -->
+    <section class="auth-pane" id="paneNovaSenha" hidden>
+      <div class="auth-mob">
+        <svg class="m" viewBox="0 0 100 100" aria-hidden="true">
+          <path d="M6 24 L44 32 L44 88 L6 78 Z" fill="var(--accent)"/>
+          <path d="M94 24 L56 32 L56 88 L94 78 Z" fill="var(--accent)"/>
+        </svg> Biblioteca
+      </div>
+      <h1>Nova senha</h1>
+      <p class="auth-lead">Escolha uma senha e você já entra direto.</p>
+
+      <form id="formNovaSenha" autocomplete="on" novalidate>
+        <div class="auth-field">
+          <label for="npSenha">Nova senha</label>
+          <div class="wrap-pw">
+            <input type="password" id="npSenha" required minlength="8" autocomplete="new-password" placeholder="mínimo 8 caracteres">
+            <button type="button" class="auth-eye" data-eye="npSenha">mostrar</button>
+          </div>
+        </div>
+        <div class="auth-field">
+          <label for="npConfirma">Repita a senha</label>
+          <input type="password" id="npConfirma" required autocomplete="new-password" placeholder="a mesma de cima">
+        </div>
+        <div class="auth-msg" id="msgNovaSenha" hidden></div>
+        <button class="auth-go" type="submit">Salvar e entrar</button>
+      </form>
+    </section>
+
   </main>
 </div>
 

@@ -130,13 +130,18 @@
 
   const telaAberta = () => !view.hidden;
 
+  const PRIMEIRO_CAMPO = { entrar: "inEmail", criar: "upNome", novaSenha: "npSenha" };
+
   function abreTela(qual = "entrar") {
     $("paneEntrar").hidden = qual !== "entrar";
     $("paneCriar").hidden = qual !== "criar";
+    $("paneNovaSenha").hidden = qual !== "novaSenha";
+    // Na volta do link de recuperação não faz sentido oferecer "usar sem conta".
+    $("authSkip").hidden = qual === "novaSenha";
     view.hidden = false;
     document.body.style.overflow = "hidden";
     aviso("");
-    setTimeout(() => { const i = $(qual === "criar" ? "upNome" : "inEmail"); i && i.focus(); }, 60);
+    setTimeout(() => { const i = $(PRIMEIRO_CAMPO[qual]); i && i.focus(); }, 60);
   }
   function fechaTela() {
     view.hidden = true;
@@ -162,9 +167,10 @@
       mensagem fora da área visível é o mesmo que mensagem nenhuma. */
   function aviso(texto, tipo) {
     const alvo = !telaAberta() ? "acctMsg"
+               : !$("paneNovaSenha").hidden ? "msgNovaSenha"
                : !$("paneCriar").hidden ? "msgCriar"
                : "msgEntrar";
-    for (const id of ["acctMsg", "msgEntrar", "msgCriar"]) {
+    for (const id of ["acctMsg", "msgEntrar", "msgCriar", "msgNovaSenha"]) {
       const el = $(id);
       if (!el) continue;
       if (id === alvo) {
@@ -256,6 +262,24 @@
     }
   });
 
+  $("formNovaSenha").addEventListener("submit", async e => {
+    e.preventDefault();
+    const s1 = $("npSenha").value, s2 = $("npConfirma").value;
+    if (s1.length < 8) return aviso("A senha precisa de pelo menos 8 caracteres.", "erro");
+    if (s1 !== s2) return aviso("As duas senhas não são iguais.", "erro");
+    try {
+      await comEspera(e.target, "Salvando…", () => Supa.updatePassword(s1));
+      await carregaPerfil();
+      fechaTela();
+      toast("Senha trocada. Você está dentro.");
+    } catch (err) {
+      const m = err.message || "";
+      aviso(/should be different/i.test(m) ? "Escolha uma senha diferente da anterior."
+          : /session|expired|token/i.test(m) ? "O link de recuperação expirou. Peça outro."
+          : m, "erro");
+    }
+  });
+
   $("btnEsqueci").addEventListener("click", async () => {
     const email = $("inEmail").value.trim();
     if (!emailValido(email)) return aviso("Digite seu e-mail no campo acima e clique de novo.", "erro");
@@ -316,6 +340,14 @@
       aviso(r.error, "erro");
       return;
     }
+    // Recuperação de senha: o link autentica, mas a troca ainda precisa acontecer.
+    if (r.type === "recovery") {
+      await carregaPerfil();
+      abreTela("novaSenha");
+      aviso("Link confirmado. Defina sua nova senha.", "ok");
+      return;
+    }
+
     await carregaPerfil();
     toast(r.type === "signup" ? "E-mail confirmado. Bem-vindo!" : "Você entrou.");
     if (r.type === "signup") {
