@@ -1643,6 +1643,20 @@ function renderAll() { renderToday(); renderShelf(); renderStats(); renderNotes(
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
+/* Nada de falhar calado. Um erro não tratado costuma virar "cliquei e não
+   aconteceu nada", que é impossível de diagnosticar à distância. Melhor um
+   aviso feio na tela do que um app mudo. */
+window.addEventListener("error", e => {
+  if (e.message === "ResizeObserver loop limit exceeded") return;
+  console.error(e.error || e.message);
+  toast("Algo falhou aqui dentro: " + (e.message || "erro desconhecido"));
+});
+window.addEventListener("unhandledrejection", e => {
+  const m = (e.reason && (e.reason.message || e.reason)) || "falha desconhecida";
+  console.error(e.reason);
+  toast("Algo falhou aqui dentro: " + m);
+});
+
 let toastTimer;
 function toast(msg) {
   const el = document.getElementById("toast");
