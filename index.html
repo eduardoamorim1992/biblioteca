@@ -727,7 +727,7 @@ dialog#authDlg::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(3px)}
       <path d="M68 29 L80 27 L80 62 L74 56 L68 63 Z" fill="#eb6834"/>
     </svg>
     <h2>Sua leitura, em ordem.</h2>
-    <p>Meta diária, fila de livros, cronômetro e estatísticas. O app funciona sozinho no seu navegador — a conta só acrescenta.</p>
+    <p>Meta diária, fila de livros, cronômetro e estatísticas — com sua estante salva na nuvem e o seu lugar no ranking de leitores.</p>
     <ul class="auth-points">
       <li><span class="tick">✓</span><span><b>Backup na nuvem</b><span>sua estante deixa de depender de um navegador só</span></span></li>
       <li><span class="tick">✓</span><span><b>Perfil de leitor</b><span>o que você leu no ano, sua sequência, suas resenhas</span></span></li>
@@ -736,7 +736,6 @@ dialog#authDlg::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(3px)}
   </aside>
 
   <main class="auth-panel">
-    <button class="auth-x" type="button" id="authSkip">Usar sem conta</button>
 
     <!-- ---------------- entrar ---------------- -->
     <section class="auth-pane" id="paneEntrar">
@@ -773,6 +772,10 @@ dialog#authDlg::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(3px)}
         <button type="button" id="btnAtualizar"
           style="background:none;border:0;padding:0;color:var(--accent);cursor:pointer;font-size:11.5px;font-weight:600">
           forçar atualização
+        </button> ·
+        <button type="button" id="btnDiag"
+          style="background:none;border:0;padding:0;color:var(--accent);cursor:pointer;font-size:11.5px;font-weight:600">
+          copiar diagnóstico
         </button>
       </p>
     </section>
@@ -1680,19 +1683,26 @@ function esc(s) {
 }
 /* Versão visível na tela de entrada. Sem isso não há como saber, à distância,
    se o navegador está rodando o código publicado ou uma sobra de cache. */
-const APP_VERSION = "v9";
+const APP_VERSION = "v10";
 
 /* Nada de falhar calado. Um erro não tratado costuma virar "cliquei e não
    aconteceu nada", que é impossível de diagnosticar à distância. Melhor um
    aviso feio na tela do que um app mudo. */
+window.ULTIMOS_ERROS = [];
+function registraErro(origem, msg) {
+  window.ULTIMOS_ERROS.push(`[${new Date().toLocaleTimeString("pt-BR")}] ${origem}: ${msg}`);
+  if (window.ULTIMOS_ERROS.length > 12) window.ULTIMOS_ERROS.shift();
+}
 window.addEventListener("error", e => {
   if (e.message === "ResizeObserver loop limit exceeded") return;
   console.error(e.error || e.message);
+  registraErro("script", e.message || "erro desconhecido");
   toast("Algo falhou aqui dentro: " + (e.message || "erro desconhecido"));
 });
 window.addEventListener("unhandledrejection", e => {
   const m = (e.reason && (e.reason.message || e.reason)) || "falha desconhecida";
   console.error(e.reason);
+  registraErro("promessa", m);
   toast("Algo falhou aqui dentro: " + m);
 });
 

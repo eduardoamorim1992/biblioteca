@@ -136,8 +136,6 @@
     $("paneEntrar").hidden = qual !== "entrar";
     $("paneCriar").hidden = qual !== "criar";
     $("paneNovaSenha").hidden = qual !== "novaSenha";
-    // Na volta do link de recuperação não faz sentido oferecer "usar sem conta".
-    $("authSkip").hidden = qual === "novaSenha";
     view.hidden = false;
     document.body.style.overflow = "hidden";
     aviso("");
@@ -198,7 +196,8 @@
     pinta(Supa.session);
   }
 
-  Supa.onChange(s => { if (!s) { perfil = null; } pinta(s); });
+  // Sair devolve para a tela de entrada: sem conta, não há app.
+  Supa.onChange(s => { if (!s) { perfil = null; abreTela("entrar"); } pinta(s); });
 
   // Fora da conta abre a tela de entrada; dentro, o painel da conta.
   $("accountBtn").addEventListener("click", async () => {
@@ -211,8 +210,6 @@
     }
   });
   $("authClose").addEventListener("click", () => dlg.close());
-  $("authSkip").addEventListener("click", fechaTela);
-  document.addEventListener("keydown", e => { if (e.key === "Escape" && telaAberta()) fechaTela(); });
 
   document.querySelectorAll("[data-goto]").forEach(b =>
     b.addEventListener("click", () => abreTela(b.dataset.goto)));
@@ -316,6 +313,71 @@
     location.replace(location.pathname + "?atualizado=" + Date.now());
   });
 
+  /* Diagnóstico em um clique. Sem senha, sem token: só o que preciso para
+     saber onde a entrada está travando. */
+  $("btnDiag").addEventListener("click", async () => {
+    const btn = $("btnDiag");
+    btn.disabled = true;
+    aviso("Coletando diagnóstico…");
+    const L = [];
+    const p = (k, v) => L.push(`${k}: ${v}`);
+    try {
+      p("versao", typeof APP_VERSION !== "undefined" ? APP_VERSION : "desconhecida");
+      p("url", location.origin + location.pathname);
+      p("online", navigator.onLine);
+      p("backend configurado", Supa.ready);
+      p("tem sessao guardada", !!Supa.session);
+
+      if ("serviceWorker" in navigator) {
+        const reg = await navigator.serviceWorker.getRegistration();
+        p("service worker", reg && reg.active ? reg.active.state : "nenhum");
+        p("controlando a pagina", !!navigator.serviceWorker.controller);
+      }
+      if ("caches" in window) p("caches", (await caches.keys()).join(", ") || "nenhum");
+
+      // Sonda: prova se o navegador alcança o servidor de autenticação.
+      // Usa uma senha inventada de propósito — a sua nunca sai daqui.
+      const email = ($("inEmail").value.trim()) || "sonda@exemplo.com";
+      const t0 = Date.now();
+      try {
+        const res = await fetch(window.BIBLIOTECA_CONFIG.url + "/auth/v1/token?grant_type=password", {
+          method: "POST",
+          headers: { apikey: window.BIBLIOTECA_CONFIG.anonKey, "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password: "sonda-invalida-nao-e-sua-senha" })
+        });
+        const corpo = await res.text();
+        p("sonda auth", `HTTP ${res.status} em ${Date.now() - t0}ms`);
+        p("sonda resposta", corpo.slice(0, 200));
+      } catch (e) {
+        p("sonda auth", "FALHOU sem resposta: " + e.message + " (bloqueio de rede, extensao ou proxy?)");
+      }
+
+      p("erros recentes", (window.ULTIMOS_ERROS || []).length ? "\n  " + window.ULTIMOS_ERROS.join("\n  ") : "nenhum");
+      p("mensagem na tela", $("msgEntrar").hidden ? "nenhuma" : $("msgEntrar").textContent);
+
+      const texto = "DIAGNOSTICO BIBLIOTECA\n" + L.join("\n");
+      console.log(texto);
+      try {
+        await navigator.clipboard.writeText(texto);
+        aviso("Diagnóstico copiado. Cole na conversa.", "ok");
+      } catch (e) {
+        // Alguns navegadores recusam a área de transferência: mostra para copiar à mão.
+        const el = $("msgEntrar");
+        el.hidden = false;
+        el.className = "auth-msg";
+        el.innerHTML = "";
+        const t = document.createElement("textarea");
+        t.value = texto;
+        t.readOnly = true;
+        t.style.cssText = "width:100%;min-height:150px;font:12px/1.45 ui-monospace,monospace;margin-top:6px";
+        el.append("Copie o texto abaixo e cole na conversa:", t);
+        t.focus(); t.select();
+      }
+    } catch (e) {
+      aviso("Falha ao coletar: " + e.message, "erro");
+    } finally { btn.disabled = false; }
+  });
+
   $("appVersion").textContent = (typeof APP_VERSION !== "undefined" ? APP_VERSION : "desconhecida");
 
   $("btnSair").addEventListener("click", async () => {
@@ -360,9 +422,14 @@
   });
 
   /* Chegou de volta de um link de confirmação, recuperação ou OAuth. */
+  const exigeEntrada = () => { if (!Supa.session) abreTela("entrar"); };
+
   (async () => {
     const r = await Supa.captureFromUrl();
-    if (!r) { if (Supa.session) carregaPerfil(); return; }
+    if (!r) {
+      if (Supa.session) await carregaPerfil(); else exigeEntrada();
+      return;
+    }
 
     if (r.error) {
       abreTela("entrar");
