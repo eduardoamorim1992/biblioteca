@@ -306,17 +306,19 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;padding-right:0}
   display:grid;place-items:center;font-size:11px;margin-top:1px;
 }
 
+/* margin:auto no filho centraliza quando há espaço e NÃO corta quando não há —
+   align-items:center empurraria o topo do formulário para fora da rolagem. */
 .auth-panel{
-  position:relative;display:flex;align-items:center;justify-content:center;
-  padding:clamp(24px,4vw,48px);overflow-y:auto;
+  position:relative;display:flex;overflow-y:auto;
+  padding:clamp(56px,6vw,64px) clamp(24px,4vw,48px) clamp(32px,4vw,48px);
 }
-.auth-pane{width:100%;max-width:376px;animation:paneIn .2s ease-out}
+.auth-pane{width:100%;max-width:376px;margin:auto;animation:paneIn .2s ease-out}
 @keyframes paneIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 @media(prefers-reduced-motion:reduce){.auth-pane{animation:none}}
 .auth-pane h1{font-size:28px;letter-spacing:-.03em;font-weight:680}
 .auth-lead{color:var(--text-2);font-size:14.5px;margin-top:7px;margin-bottom:26px}
 .auth-x{
-  position:absolute;top:18px;right:18px;appearance:none;border:1px solid var(--border);
+  position:fixed;top:18px;right:18px;z-index:210;appearance:none;border:1px solid var(--border);
   background:var(--surface);color:var(--text-2);border-radius:9px;padding:7px 13px;
   cursor:pointer;font-size:13px;font-weight:550;
 }
@@ -761,6 +763,7 @@ dialog#authDlg::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(3px)}
           <p class="auth-hint"><button type="button" class="auth-switch-link" id="btnEsqueci"
              style="background:none;border:0;padding:0;color:var(--accent);cursor:pointer;font-size:12px;font-weight:600">Esqueci minha senha</button></p>
         </div>
+        <div class="auth-msg" id="msgEntrar" hidden></div>
         <button class="auth-go" type="submit">Entrar</button>
       </form>
 
@@ -795,6 +798,7 @@ dialog#authDlg::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(3px)}
           </div>
           <p class="auth-hint" id="pwHint">Use pelo menos 8 caracteres.</p>
         </div>
+        <div class="auth-msg" id="msgCriar" hidden></div>
         <button class="auth-go" type="submit">Criar conta</button>
       </form>
 
@@ -805,7 +809,6 @@ dialog#authDlg::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(3px)}
       <p class="auth-switch">Já tem conta? <button type="button" data-goto="entrar">Entrar</button></p>
     </section>
 
-    <div class="auth-msg" id="authMsg" hidden style="max-width:376px;width:100%;position:absolute;bottom:24px;left:50%;transform:translateX(-50%)"></div>
   </main>
 </div>
 

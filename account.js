@@ -158,15 +158,24 @@
     }
   }
 
-  /** Escreve na superfície que está aberta — tela de entrada ou diálogo. */
+  /** Escreve dentro do formulário que está à vista, nunca num rodapé flutuante:
+      mensagem fora da área visível é o mesmo que mensagem nenhuma. */
   function aviso(texto, tipo) {
-    const el = $(telaAberta() ? "authMsg" : "acctMsg");
-    const outro = $(telaAberta() ? "acctMsg" : "authMsg");
-    outro.hidden = true;
-    el.textContent = texto || "";
-    el.hidden = !texto;
-    el.className = "auth-msg" + (tipo ? " " + tipo : "");
-    if (telaAberta()) el.style.cssText = "max-width:376px;width:100%;position:absolute;bottom:24px;left:50%;transform:translateX(-50%)";
+    const alvo = !telaAberta() ? "acctMsg"
+               : !$("paneCriar").hidden ? "msgCriar"
+               : "msgEntrar";
+    for (const id of ["acctMsg", "msgEntrar", "msgCriar"]) {
+      const el = $(id);
+      if (!el) continue;
+      if (id === alvo) {
+        el.textContent = texto || "";
+        el.hidden = !texto;
+        el.className = "auth-msg" + (tipo ? " " + tipo : "");
+        if (texto) el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      } else {
+        el.hidden = true;
+      }
+    }
   }
 
   /** Trava o botão enquanto a requisição corre, para não disparar duas vezes. */
