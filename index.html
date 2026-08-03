@@ -780,17 +780,6 @@ dialog#authDlg::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(3px)}
       </form>
 
       <p class="auth-switch">Ainda não tem conta? <button type="button" data-goto="criar">Criar conta</button></p>
-      <p class="auth-legal">
-        versão <b id="appVersion">?</b> ·
-        <button type="button" id="btnAtualizar"
-          style="background:none;border:0;padding:0;color:var(--accent);cursor:pointer;font-size:11.5px;font-weight:600">
-          forçar atualização
-        </button> ·
-        <button type="button" id="btnDiag"
-          style="background:none;border:0;padding:0;color:var(--accent);cursor:pointer;font-size:11.5px;font-weight:600">
-          copiar diagnóstico
-        </button>
-      </p>
     </section>
 
     <!-- ---------------- criar conta ---------------- -->
@@ -1696,7 +1685,7 @@ function esc(s) {
 }
 /* Versão visível na tela de entrada. Sem isso não há como saber, à distância,
    se o navegador está rodando o código publicado ou uma sobra de cache. */
-const APP_VERSION = "v13";
+const APP_VERSION = "v14";
 
 /* Nada de falhar calado. Um erro não tratado costuma virar "cliquei e não
    aconteceu nada", que é impossível de diagnosticar à distância. Melhor um
