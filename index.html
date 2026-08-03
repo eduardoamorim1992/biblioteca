@@ -763,6 +763,12 @@ dialog#authDlg::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(3px)}
              style="background:none;border:0;padding:0;color:var(--accent);cursor:pointer;font-size:12px;font-weight:600">Esqueci minha senha</button></p>
         </div>
         <div class="auth-msg" id="msgEntrar" hidden></div>
+        <p id="linhaReenviar" hidden style="margin-top:8px;text-align:center">
+          <button type="button" id="btnReenviar"
+            style="background:none;border:0;padding:0;color:var(--accent);cursor:pointer;font-size:12.5px;font-weight:600">
+            Reenviar e-mail de confirmação
+          </button>
+        </p>
         <button class="auth-go" type="submit">Entrar</button>
       </form>
 
@@ -1683,7 +1689,7 @@ function esc(s) {
 }
 /* Versão visível na tela de entrada. Sem isso não há como saber, à distância,
    se o navegador está rodando o código publicado ou uma sobra de cache. */
-const APP_VERSION = "v11";
+const APP_VERSION = "v12";
 
 /* Nada de falhar calado. Um erro não tratado costuma virar "cliquei e não
    aconteceu nada", que é impossível de diagnosticar à distância. Melhor um

@@ -198,6 +198,15 @@ const Supa = (() => {
       return user;
     },
 
+    /** Reenvia o e-mail de confirmação de cadastro. Sem isto, quem não recebeu
+        o primeiro e-mail fica preso para sempre: a senha está certa e o
+        servidor recusa mesmo assim. */
+    async resendConfirmation(email) {
+      return raw("/auth/v1/resend", {
+        method: "POST", body: { type: "signup", email, gotrue_meta_security: {} }
+      });
+    },
+
     async resetPassword(email, redirectTo) {
       return raw("/auth/v1/recover", { method: "POST", body: { email, gotrue_meta_security: {}, redirect_to: redirectTo } });
     },

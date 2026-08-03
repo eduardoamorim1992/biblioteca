@@ -138,6 +138,7 @@
     $("paneNovaSenha").hidden = qual !== "novaSenha";
     view.hidden = false;
     document.body.style.overflow = "hidden";
+    $("linhaReenviar").hidden = true;
     aviso("");
     setTimeout(() => { const i = $(PRIMEIRO_CAMPO[qual]); i && i.focus(); }, 60);
   }
@@ -260,8 +261,16 @@
       await comEspera(e.target, "Entrando…", () => Supa.signIn(email, senha));
     } catch (err) {
       const m = err.message || "";
+      // Conta não confirmada é beco sem saída: a senha está certa e o servidor
+      // recusa assim mesmo. Só sai dali com outro e-mail de confirmação, então
+      // o botão de reenviar aparece junto com a explicação.
+      if (/Email not confirmed|email_not_confirmed/i.test(m)) {
+        aviso("Sua conta ainda não foi confirmada. Abra o link que enviamos para " +
+              email + " — sem isso o servidor recusa a senha, mesmo estando certa.", "erro");
+        $("linhaReenviar").hidden = false;
+        return;
+      }
       aviso(m === "Invalid login credentials" ? "E-mail ou senha incorretos."
-          : /Email not confirmed/i.test(m) ? "Confirme o e-mail antes de entrar — o link foi para sua caixa."
           : /Failed to fetch|NetworkError|load failed/i.test(m)
             ? "Não consegui falar com o servidor. Confira a conexão e tente de novo."
             : m || "Não consegui entrar, e o servidor não disse por quê.", "erro");
@@ -305,6 +314,24 @@
           : /session|expired|token/i.test(m) ? "O link de recuperação expirou. Peça outro."
           : m, "erro");
     }
+  });
+
+  $("btnReenviar").addEventListener("click", async () => {
+    const btn = $("btnReenviar");
+    const email = $("inEmail").value.trim();
+    if (!emailValido(email)) return aviso("Digite seu e-mail no campo acima e clique de novo.", "erro");
+    btn.disabled = true;
+    aviso("Reenviando a confirmação para " + email + "…");
+    try {
+      await Supa.resendConfirmation(email);
+      aviso(`Novo link enviado para ${email}. Procure também no spam e na lixeira — ` +
+            `provedores como Hotmail e Outlook costumam segurar esse e-mail.`, "ok");
+    } catch (err) {
+      const m = err.message || "";
+      aviso(/rate|limit|seconds/i.test(m)
+        ? "O servidor de e-mail tem limite por hora. Espere alguns minutos e tente de novo."
+        : "Não consegui reenviar: " + m, "erro");
+    } finally { btn.disabled = false; }
   });
 
   $("btnEsqueci").addEventListener("click", async () => {
