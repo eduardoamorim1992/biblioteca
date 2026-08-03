@@ -42,6 +42,13 @@
 
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
+
+/* O atributo hidden precisa vencer. Quem esconde um elemento com display
+   próprio — .auth-screen é display:grid — descobre que a regra do autor passa
+   por cima do [hidden] do navegador, e o elemento "escondido" continua na
+   frente de tudo. Foi assim que a tela de entrada ficou tapando o app inteiro
+   depois de um login que tinha dado certo: sem erro, sem pista, sem app. */
+[hidden]{display:none !important}
 body{
   background:var(--bg); color:var(--text);
   font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;
@@ -1689,7 +1696,7 @@ function esc(s) {
 }
 /* Versão visível na tela de entrada. Sem isso não há como saber, à distância,
    se o navegador está rodando o código publicado ou uma sobra de cache. */
-const APP_VERSION = "v12";
+const APP_VERSION = "v13";
 
 /* Nada de falhar calado. Um erro não tratado costuma virar "cliquei e não
    aconteceu nada", que é impossível de diagnosticar à distância. Melhor um
