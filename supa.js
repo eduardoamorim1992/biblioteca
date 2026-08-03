@@ -233,6 +233,58 @@ const Supa = (() => {
       return rows[0] || null;
     },
 
+    // ---------------------------------------------------------------- social
+    /* Descoberta. Tudo aqui lê só o que o RLS já abre para qualquer um:
+       perfis públicos, estantes de perfis públicos e o grafo de seguidores.
+       Nenhuma função nova no banco — o esquema já dava conta. */
+
+    /** Procura leitores por @ ou por nome. */
+    async searchReaders(termo, limit = 20) {
+      // Estes caracteres são sintaxe de filtro no PostgREST; num campo de busca
+      // eles não querem dizer nada, e deixá-los passar quebraria a consulta.
+      const t = termo.replace(/[%,()*\\]/g, "").trim();
+      if (t.length < 2) return [];
+      const alvo = encodeURIComponent(t);
+      return raw(`/rest/v1/profiles?${qs({
+        select: "id,username,display_name,bio,avatar_url", is_private: "eq.false", limit
+      })}&or=(username.ilike.*${alvo}*,display_name.ilike.*${alvo}*)`,
+      { token: session && session.access_token });
+    },
+
+    /** Quem eu sigo, em uma ida só — o app guarda e usa para pintar os botões. */
+    async following() {
+      if (!session || !session.user) return [];
+      const rows = await auth(`/rest/v1/follows?${qs({
+        select: "following", follower: "eq." + session.user.id
+      })}`);
+      return rows.map(r => r.following);
+    },
+
+    follow(userId) {
+      return auth("/rest/v1/follows", {
+        method: "POST", body: { follower: session.user.id, following: userId }
+      });
+    },
+
+    unfollow(userId) {
+      return auth(`/rest/v1/follows?${qs({
+        follower: "eq." + session.user.id, following: "eq." + userId
+      })}`, { method: "DELETE" });
+    },
+
+    /** Leitores públicos que têm estes livros na estante.
+        Um pedido para a estante inteira, não um por livro: com 40 livros na
+        tela, 40 requisições seriam um jeito elegante de derrubar o próprio app. */
+    async readersOfBooks(olKeys) {
+      const chaves = [...new Set((olKeys || []).filter(Boolean))];
+      if (!chaves.length || !session || !session.user) return [];
+      const lista = chaves.map(encodeURIComponent).join(",");
+      return auth(`/rest/v1/books?${qs({
+        select: "ol_key,status,owner,profiles(username,display_name,avatar_url)",
+        owner: "neq." + session.user.id, limit: 200
+      })}&ol_key=in.(${lista})`);
+    },
+
     // --------------------------------------------------------------- ranking
     leaderboard(period = "month", metric = "pages", limit = 50) {
       return raw("/rest/v1/rpc/leaderboard", {

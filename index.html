@@ -370,11 +370,11 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;padding-right:0}
 .auth-legal{margin-top:20px;font-size:11.5px;color:var(--muted);line-height:1.55;text-align:center}
 
 /* ---------- conta ---------- */
-dialog#authDlg{
+dialog#authDlg,dialog#perfilDlg{
   border:1px solid var(--border);border-radius:16px;padding:0;background:var(--surface);color:var(--text);
   width:min(440px,92vw);box-shadow:0 20px 60px rgba(0,0,0,.28);
 }
-dialog#authDlg::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(3px)}
+dialog#authDlg::backdrop,dialog#perfilDlg::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(3px)}
 .dlg-head{display:flex;align-items:center;gap:10px;padding:16px 18px;border-bottom:1px solid var(--border)}
 .dlg-head h2{flex:1}
 .dlg-body{padding:18px}
@@ -386,6 +386,42 @@ dialog#authDlg::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(3px)}
 .check input{width:auto;margin-top:2px;flex:none}
 .dlg-sep{height:1px;background:var(--border);margin:18px 0}
 .dlg-note{font-size:12px;color:var(--muted);line-height:1.5}
+
+/* ---------- leitores ---------- */
+.leitor{
+  display:flex;align-items:center;gap:11px;padding:10px 0;
+  border-top:1px solid var(--border);
+}
+.leitor:first-child{border-top:0}
+.leitor-av{
+  flex:none;width:38px;height:38px;border-radius:50%;overflow:hidden;
+  background:var(--accent);color:#fff;display:grid;place-items:center;
+  font-weight:660;font-size:15px;text-transform:uppercase;
+}
+.leitor-av img{width:100%;height:100%;object-fit:cover}
+.leitor-id{flex:1;min-width:0}
+.leitor-id b{display:block;font-size:14.5px;font-weight:620;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.leitor-id span{font-size:12.5px;color:var(--muted)}
+.leitor-num{font-size:12.5px;color:var(--text-2);text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.leitor-pos{
+  flex:none;width:24px;text-align:right;font-size:12.5px;color:var(--muted);
+  font-variant-numeric:tabular-nums;
+}
+.leitor[data-eu="1"]{background:var(--surface-2);border-radius:9px;padding-left:8px;padding-right:8px}
+
+/* Linha discreta sob o livro: só aparece quando há alguém do outro lado. */
+.quem-le{
+  margin-top:7px;font-size:12px;color:var(--accent);cursor:pointer;
+  background:none;border:0;padding:0;font-weight:600;text-align:left;
+}
+.quem-le:hover{text-decoration:underline}
+
+.perfil-topo{display:flex;align-items:center;gap:13px;margin-bottom:14px}
+.perfil-nums{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0}
+.perfil-num{background:var(--surface-2);border-radius:10px;padding:11px 9px;text-align:center}
+.perfil-num b{display:block;font-size:19px;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.perfil-num span{font-size:11px;color:var(--muted)}
+.perfil-bio{font-size:13.5px;color:var(--text-2);line-height:1.55;margin-bottom:12px}
 
 .section{display:none}
 .section.on{display:block}
@@ -408,6 +444,7 @@ dialog#authDlg::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(3px)}
     <button class="tab" role="tab" data-view="estante" aria-selected="false">Estante</button>
     <button class="tab" role="tab" data-view="progresso" aria-selected="false">Progresso</button>
     <button class="tab" role="tab" data-view="notas" aria-selected="false">Notas</button>
+    <button class="tab" role="tab" data-view="leitores" aria-selected="false">Leitores</button>
   </nav>
 </header>
 
@@ -674,7 +711,57 @@ dialog#authDlg::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(3px)}
     </div>
   </section>
 
+  <!-- ---------------- leitores ---------------- -->
+  <section class="section" id="view-leitores">
+    <div class="card" style="margin-top:16px">
+      <div class="card-head">
+        <h2>Encontrar leitores</h2>
+        <span class="sub">por @ ou por nome</span>
+      </div>
+      <div class="field">
+        <label for="buscaLeitor">Quem você procura</label>
+        <input type="search" id="buscaLeitor" placeholder="ex.: eduardo" autocomplete="off">
+      </div>
+      <div id="resultadoBusca"></div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <div class="card-head">
+        <h2>Ranking</h2>
+        <span class="sub">só perfis públicos</span>
+      </div>
+      <div class="row" style="margin-bottom:12px">
+        <div class="field">
+          <label for="rankPeriodo">Período</label>
+          <select id="rankPeriodo">
+            <option value="week" selected>Esta semana</option>
+            <option value="month">Este mês</option>
+            <option value="year">Este ano</option>
+            <option value="all">Sempre</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="rankMetrica">Critério</label>
+          <select id="rankMetrica">
+            <option value="pages" selected>Páginas</option>
+            <option value="books">Livros</option>
+            <option value="streak">Dias seguidos</option>
+          </select>
+        </div>
+      </div>
+      <div id="listaRanking"></div>
+    </div>
+  </section>
+
 </div>
+
+<dialog id="perfilDlg">
+  <div class="dlg-head">
+    <h2 id="perfilTitulo">Leitor</h2>
+    <button class="icon-btn" id="perfilClose" aria-label="Fechar">✕</button>
+  </div>
+  <div class="dlg-body" id="perfilCorpo"></div>
+</dialog>
 
 <dialog id="authDlg">
   <div class="dlg-head">
@@ -1423,7 +1510,7 @@ function bookCard(b, compact) {
   const author = [b.author || "—", b.year].filter(Boolean).join(", ");
 
   return `
-  <article class="book">
+  <article class="book" data-ol="${esc(b.olKey || "")}">
     ${thumb}
     <div style="min-width:0">
       <div class="t">${esc(b.title)}</div>
@@ -1453,6 +1540,12 @@ function renderShelf() {
   document.getElementById("shelfList").innerHTML = list.length
     ? list.map(b => bookCard(b, false)).join("")
     : `<div class="empty">${state.books.length ? "Nada com esse filtro." : "Sua estante está vazia. Adicione o primeiro livro acima."}</div>`;
+
+  // A camada social é opcional e chega depois: a estante não espera por ela.
+  // typeof, e não window.Social: `const` no topo de um script clássico cria
+  // binding global mas não vira propriedade de window — o teste por window
+  // dava sempre falso e o gancho nunca disparava.
+  if (typeof Social !== "undefined") Social.enriquecerEstante();
 }
 
 /* =======================================================================
@@ -1685,7 +1778,7 @@ function esc(s) {
 }
 /* Versão visível na tela de entrada. Sem isso não há como saber, à distância,
    se o navegador está rodando o código publicado ou uma sobra de cache. */
-const APP_VERSION = "v14";
+const APP_VERSION = "v15";
 
 /* Nada de falhar calado. Um erro não tratado costuma virar "cliquei e não
    aconteceu nada", que é impossível de diagnosticar à distância. Melhor um
@@ -2003,5 +2096,6 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
 }
 </script>
 <script src="account.js"></script>
+<script src="social.js"></script>
 </body>
 </html>
