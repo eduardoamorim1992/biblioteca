@@ -20,15 +20,22 @@ O tempo é medido por relógio absoluto e o estado fica salvo: bloquear a tela, 
 
 ## Onde ficam os dados
 
-No `localStorage` do navegador que você usar. Nada sai da sua máquina.
+Em dois lugares ao mesmo tempo: no `localStorage` do navegador, para o app
+abrir instantâneo e funcionar offline, e na sua conta, para você reencontrar
+tudo em qualquer aparelho.
 
-Consequências práticas:
+A sincronização é automática — não há botão de enviar. O que você registra
+sobe segundos depois; o que outro aparelho registrou desce quando você abre o
+app ou volta para a aba. Sem conexão, as alterações ficam esperando e sobem
+sozinhas quando a rede volta; o painel da conta mostra quantas estão na fila.
 
-- Use sempre o mesmo navegador e o mesmo perfil.
-- Não sincroniza entre dispositivos sozinho.
-- Limpar dados do navegador apaga tudo.
+Como cada registro carrega o mesmo id nos dois lados, sincronizar duas vezes
+não duplica nada, e apagar num aparelho apaga no outro. Em empate — o mesmo
+livro alterado nos dois lugares — vence a alteração que ainda não tinha
+subido: dado registrado nunca é descartado por dedução.
 
-Por isso existem **Exportar (.json)** e **Importar** no rodapé da aba Progresso. Exporte de vez em quando.
+**Exportar (.json)** e **Importar**, no rodapé da aba Progresso, continuam
+existindo para quem quer uma cópia fora do sistema.
 
 ## Busca de metadados (opcional)
 

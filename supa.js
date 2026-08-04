@@ -301,6 +301,17 @@ const Supa = (() => {
       });
     },
 
+    /* Grava mandando o id junto: se a linha já existe, atualiza; se não,
+       cria. É o que torna a sincronia repetível — mandar duas vezes o mesmo
+       registro tem que dar o mesmo resultado que mandar uma, senão cada
+       reenvio duplicaria a estante. */
+    upsert(table, rows) {
+      return auth(`/rest/v1/${table}`, {
+        method: "POST", body: rows,
+        headers: { Prefer: "resolution=merge-duplicates,return=minimal" }
+      });
+    },
+
     select(table, params = {}) {
       return auth(`/rest/v1/${table}?${qs(Object.assign({ select: "*" }, params))}`);
     },

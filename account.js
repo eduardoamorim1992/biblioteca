@@ -4,122 +4,410 @@
  * antes. Entrar é opcional e só acrescenta — nunca é pré-requisito para ler
  * nem para registrar leitura.
  *
- * A sincronização é explícita, com dois botões, em vez de automática. Sync
- * automático entre um banco local e um remoto precisa resolver conflito, e
- * resolver conflito errado apaga leitura registrada. Enquanto não houver uma
- * regra boa, quem decide é o usuário. */
+ * A sincronização é automática. Antes era manual, com dois botões, para não
+ * ter que resolver conflito — mas o preço disso era o app mentir: quem
+ * criava conta, lia, e abria o app em outro navegador achava a estante
+ * vazia. Guardar no navegador e chamar isso de conta não é conta.
+ *
+ * O que torna a automática segura aqui:
+ *   - o id local É o id do servidor (uuid), então o mesmo registro é o mesmo
+ *     registro em qualquer aparelho e reenviar não duplica nada;
+ *   - a "sombra" guarda o que o servidor tem de cada registro, então dá para
+ *     distinguir "editei aqui" de "mudou lá" sem precisar de relógio;
+ *   - em qualquer empate, dado sobrevive: nada é apagado por dedução. */
 "use strict";
 
 (() => {
   const $ = id => document.getElementById(id);
 
-  /* ------------------------------------------------------------------ mapa
-     Liga cada registro local ao seu par no servidor. Sem isso, cada envio
-     duplicaria a estante inteira. */
-  const MAP_KEY = "biblioteca.sync.v1";
-  let map = { books: {}, sessions: {}, notes: {} };
-  try { map = Object.assign(map, JSON.parse(localStorage.getItem(MAP_KEY) || "{}")); } catch (e) { }
-  const saveMap = () => localStorage.setItem(MAP_KEY, JSON.stringify(map));
+  /* =================================================================== dados
+     A sombra é a memória do que o servidor tem: id -> impressão digital da
+     linha enviada. Com ela, três perguntas ficam respondíveis sem relógio e
+     sem coluna nova no banco:
+       registro local != sombra  -> mudou aqui, precisa subir
+       está na sombra e sumiu daqui -> apaguei aqui, precisa apagar lá
+       está na sombra e sumiu de lá -> apagaram em outro aparelho */
+  const SYNC_KEY = "biblioteca.sync.v2";
+  const MAPA_ANTIGO = "biblioteca.sync.v1";
 
-  const bookRow = b => ({
-    owner: Supa.user.id,
-    title: b.title,
-    author: b.author || null,
-    pages: b.pages || null,
-    current_page: b.pages ? Math.min(b.current || 0, b.pages) : (b.current || 0),
-    status: b.status,
-    priority: b.priority ?? 1,
-    cover_url: b.cover || null,
-    year: b.year || null,
-    isbn: b.isbn || null,
-    ol_key: b.olKey || null,
-    synopsis: b.synopsis || null,
-    started_at: b.startedAt || null,
-    finished_at: b.finishedAt || null
+  const sombraVazia = () => ({ books: {}, sessions: {}, notes: {} });
+  let meta = { userId: null, shadow: sombraVazia(), quarentena: {}, lastSync: 0, migrado: false };
+  try { Object.assign(meta, JSON.parse(localStorage.getItem(SYNC_KEY) || "{}")); } catch (e) { }
+  meta.shadow = Object.assign(sombraVazia(), meta.shadow);
+  meta.quarentena = meta.quarentena || {};
+  const salvaMeta = () => { try { localStorage.setItem(SYNC_KEY, JSON.stringify(meta)); } catch (e) { } };
+
+  /* Impressão digital da linha (FNV-1a). Só precisa responder "é a mesma
+     coisa?", não precisa ser criptográfica — e guardar a linha inteira na
+     sombra dobraria o espaço usado no navegador. */
+  function digital(obj) {
+    const s = JSON.stringify(obj);
+    let h = 0x811c9dc5;
+    for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+    return h.toString(36) + "." + s.length;
+  }
+
+  /* --------------------------------------------------- tradução local <-> banco
+     As duas direções precisam ser idempotentes: traduzir de ida e de volta
+     tem que devolver a mesma impressão digital, senão todo registro baixado
+     pareceria "alterado aqui" e subiria de novo para sempre. */
+  const limite = (n, min, max) => (typeof n === "number" && isFinite(n) ? Math.min(Math.max(Math.round(n), min), max) : null);
+
+  /* Só conteúdo: dono e id entram na hora de enviar. Misturar identidade com
+     conteúdo faria a impressão digital mudar por motivo que não é do usuário. */
+  const bookRow = b => {
+    const pages = limite(b.pages, 1, 20000);
+    return {
+      title: String(b.title || "").slice(0, 300),
+      author: b.author || null,
+      pages,
+      current_page: Math.max(0, Math.min(b.current || 0, pages || Infinity)) || 0,
+      status: ["fila", "lendo", "lido", "abandonado"].includes(b.status) ? b.status : "fila",
+      priority: limite(b.priority ?? 1, 0, 2) ?? 1,
+      cover_url: b.cover || null,
+      year: b.year || null,
+      isbn: b.isbn || null,
+      ol_key: b.olKey || null,
+      synopsis: b.synopsis || null,
+      started_at: b.startedAt || null,
+      finished_at: b.finishedAt || null
+    };
+  };
+  const sessionRow = s => ({
+    book_id: s.bookId, date: s.date,
+    pages: Math.max(0, s.pages || 0), minutes: Math.max(0, s.minutes || 0)
+  });
+  const noteRow = n => ({
+    book_id: n.bookId, page: n.page || null,
+    kind: n.type === "quote" ? "quote" : "note",
+    body: String(n.text || "").slice(0, 4000), is_public: n.isPublic === true
   });
 
-  async function pushAll(onStep) {
-    if (!Supa.user) throw new Error("Entre na sua conta primeiro.");
-    const feito = { livros: 0, sessoes: 0, notas: 0 };
+  const bookLocal = r => ({
+    id: r.id, title: r.title, author: r.author || "", pages: r.pages || 0,
+    current: r.current_page || 0, status: r.status, priority: r.priority ?? 1,
+    cover: r.cover_url || null, year: r.year || null, isbn: r.isbn || null,
+    olKey: r.ol_key || null, synopsis: r.synopsis || null,
+    addedAt: (r.created_at || "").slice(0, 10) || todayISO(),
+    startedAt: r.started_at || null, finishedAt: r.finished_at || null
+  });
+  const sessionLocal = r => ({
+    id: r.id, bookId: r.book_id, date: r.date, pages: r.pages || 0,
+    minutes: r.minutes || 0, createdAt: Date.parse(r.created_at) || Date.now()
+  });
+  const noteLocal = r => ({
+    id: r.id, bookId: r.book_id, page: r.page || null,
+    type: r.kind === "quote" ? "quote" : "note", text: r.body,
+    isPublic: !!r.is_public, createdAt: Date.parse(r.created_at) || Date.now()
+  });
 
+  /* O banco recusa linha fora destas regras. Mandar assim mesmo derrubaria o
+     lote inteiro por causa de um registro estranho — melhor deixar o esquisito
+     em casa do que travar a sincronia de todo o resto. */
+  const TABELAS = {
+    books: {
+      linha: bookRow, local: bookLocal,
+      lista: () => state.books, guarda: v => { state.books = v; },
+      valido: b => !!String(b.title || "").trim()
+    },
+    sessions: {
+      linha: sessionRow, local: sessionLocal,
+      lista: () => state.sessions, guarda: v => { state.sessions = v; },
+      valido: s => !!s.date && ((s.pages || 0) > 0 || (s.minutes || 0) > 0)
+    },
+    notes: {
+      linha: noteRow, local: noteLocal,
+      lista: () => state.notes, guarda: v => { state.notes = v; },
+      valido: n => !!String(n.text || "").trim()
+    }
+  };
+  const ORDEM = ["books", "sessions", "notes"];   // livro antes do que aponta para ele
+
+  /* ================================================================ migração
+     Quem já usava o app tem ids antigos e, talvez, um mapa local->remoto da
+     versão manual. Reaproveitar esse mapa é o que evita duplicar no servidor
+     tudo que já tinha sido enviado uma vez. */
+  const EH_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  function migraIds() {
+    if (meta.migrado) return;
+    let antigo = {};
+    try { antigo = JSON.parse(localStorage.getItem(MAPA_ANTIGO) || "{}"); } catch (e) { }
+    const novo = (tabela, id) => (antigo[tabela] && antigo[tabela][id]) || uid();
+
+    const deLivro = {};
     for (const b of state.books) {
-      const row = bookRow(b);
-      const remote = map.books[b.id];
-      if (remote) {
-        await Supa.update("books", { id: "eq." + remote }, row);
-      } else {
-        const [created] = await Supa.insert("books", [row]);
-        map.books[b.id] = created.id;
+      const id = EH_UUID.test(b.id) ? b.id : novo("books", b.id);
+      deLivro[b.id] = id; b.id = id;
+    }
+    for (const s of state.sessions) {
+      if (!EH_UUID.test(s.id)) s.id = novo("sessions", s.id);
+      s.bookId = deLivro[s.bookId] || s.bookId;
+    }
+    for (const n of state.notes) {
+      if (!EH_UUID.test(n.id)) n.id = novo("notes", n.id);
+      n.bookId = deLivro[n.bookId] || n.bookId;
+    }
+    if (state.timer && deLivro[state.timer.bookId]) state.timer.bookId = deLivro[state.timer.bookId];
+
+    meta.migrado = true;
+    salvaMeta();
+    save();
+  }
+
+  /* ================================================================== subida */
+  function pendentes(nome) {
+    const t = TABELAS[nome], sombra = meta.shadow[nome];
+    const vistos = new Set();
+    const sujos = [];
+    for (const r of t.lista()) {
+      vistos.add(r.id);
+      if (!t.valido(r)) continue;
+      const linha = t.linha(r);
+      const h = digital(linha);
+      if (sombra[r.id] === h) continue;
+      if (meta.quarentena[nome + ":" + r.id] === h) continue;   // já recusada assim
+      sujos.push({ id: r.id, linha, h });
+    }
+    return { sujos, apagados: Object.keys(sombra).filter(id => !vistos.has(id)) };
+  }
+
+  const contaPendentes = () => {
+    if (!Supa.user) return 0;
+    return ORDEM.reduce((n, t) => {
+      const p = pendentes(t);
+      return n + p.sujos.length + p.apagados.length;
+    }, 0);
+  };
+
+  async function empurra() {
+    // Apaga do fim para o começo: sessões e notas antes dos livros que elas
+    // apontam. (O banco cascatearia de qualquer jeito, mas depender disso
+    // seria confiar em efeito colateral.)
+    for (const nome of [...ORDEM].reverse()) {
+      const { apagados } = pendentes(nome);
+      for (let i = 0; i < apagados.length; i += 50) {
+        const lote = apagados.slice(i, i + 50);
+        await Supa.remove(nome, { id: "in.(" + lote.join(",") + ")" });
+        lote.forEach(id => delete meta.shadow[nome][id]);
+        salvaMeta();
       }
-      feito.livros++;
-      onStep && onStep(`livros ${feito.livros}/${state.books.length}`);
     }
-    saveMap();
 
-    const novasSessoes = state.sessions.filter(s => !map.sessions[s.id] && map.books[s.bookId]);
-    for (let i = 0; i < novasSessoes.length; i += 100) {
-      const lote = novasSessoes.slice(i, i + 100);
-      const criadas = await Supa.insert("sessions", lote.map(s => ({
-        owner: Supa.user.id, book_id: map.books[s.bookId],
-        date: s.date, pages: s.pages || 0, minutes: s.minutes || 0
-      })));
-      lote.forEach((s, k) => { if (criadas[k]) map.sessions[s.id] = criadas[k].id; });
-      feito.sessoes += lote.length;
-      onStep && onStep(`sessões ${feito.sessoes}/${novasSessoes.length}`);
-    }
-    saveMap();
+    for (const nome of ORDEM) {
+      const t = TABELAS[nome];
+      let { sujos } = pendentes(nome);
+      // Sessão ou nota de livro que o servidor ainda não tem quebraria a
+      // chave estrangeira; ela sobe na próxima rodada, depois do livro.
+      if (nome !== "books") sujos = sujos.filter(x => {
+        const reg = t.lista().find(r => r.id === x.id);
+        return reg && meta.shadow.books[reg.bookId] !== undefined;
+      });
 
-    const novasNotas = state.notes.filter(n => !map.notes[n.id] && map.books[n.bookId]);
-    if (novasNotas.length) {
-      const criadas = await Supa.insert("notes", novasNotas.map(n => ({
-        owner: Supa.user.id, book_id: map.books[n.bookId],
-        page: n.page || null, kind: n.type === "quote" ? "quote" : "note",
-        body: n.text, is_public: false
-      })));
-      novasNotas.forEach((n, k) => { if (criadas[k]) map.notes[n.id] = criadas[k].id; });
-      feito.notas = novasNotas.length;
+      for (let i = 0; i < sujos.length; i += 100) {
+        const lote = sujos.slice(i, i + 100);
+        try {
+          await Supa.upsert(nome, lote.map(x => Object.assign({ id: x.id, owner: Supa.user.id }, x.linha)));
+          lote.forEach(x => { meta.shadow[nome][x.id] = x.h; });
+        } catch (e) {
+          if (deRede(e)) throw e;
+          // O lote caiu por causa de alguma linha; descobre qual mandando uma
+          // a uma, para que um registro problemático não segure os outros.
+          for (const x of lote) {
+            try {
+              await Supa.upsert(nome, [Object.assign({ id: x.id, owner: Supa.user.id }, x.linha)]);
+              meta.shadow[nome][x.id] = x.h;
+            } catch (e2) {
+              if (deRede(e2)) throw e2;
+              meta.quarentena[nome + ":" + x.id] = x.h;
+              console.warn("registro recusado pelo servidor:", nome, x.id, e2.message);
+            }
+          }
+        }
+        salvaMeta();
+      }
     }
-    saveMap();
-    return feito;
   }
 
-  async function pullAll() {
-    if (!Supa.user) throw new Error("Entre na sua conta primeiro.");
-    const [books, sessions, notes] = await Promise.all([
-      Supa.select("books", { order: "created_at.asc" }),
-      Supa.select("sessions", { order: "date.asc" }),
-      Supa.select("notes", { order: "created_at.asc" })
-    ]);
-
-    const porRemoto = {};
-    state.books = books.map(b => {
-      const local = uid();
-      porRemoto[b.id] = local;
-      map.books[local] = b.id;
-      return {
-        id: local, title: b.title, author: b.author || "", pages: b.pages || 0,
-        current: b.current_page || 0, status: b.status, priority: b.priority ?? 1,
-        cover: b.cover_url || null, year: b.year || null, isbn: b.isbn || null,
-        olKey: b.ol_key || null, synopsis: b.synopsis || null,
-        addedAt: (b.created_at || "").slice(0, 10) || todayISO(),
-        startedAt: b.started_at || null, finishedAt: b.finished_at || null
-      };
-    });
-    state.sessions = sessions.filter(s => porRemoto[s.book_id]).map(s => {
-      const local = uid(); map.sessions[local] = s.id;
-      return { id: local, bookId: porRemoto[s.book_id], date: s.date,
-               pages: s.pages || 0, minutes: s.minutes || 0, createdAt: Date.parse(s.created_at) || Date.now() };
-    });
-    state.notes = notes.filter(n => porRemoto[n.book_id]).map(n => {
-      const local = uid(); map.notes[local] = n.id;
-      return { id: local, bookId: porRemoto[n.book_id], page: n.page || null,
-               type: n.kind === "quote" ? "quote" : "note", text: n.body,
-               createdAt: Date.parse(n.created_at) || Date.now() };
-    });
-    state.timer = null;
-    saveMap(); save(); renderAll();
-    return { livros: state.books.length, sessoes: state.sessions.length, notas: state.notes.length };
+  /* ================================================================== descida */
+  async function leTudo(nome) {
+    const linhas = [];
+    for (let offset = 0; ; offset += 1000) {
+      const lote = await Supa.select(nome, { order: "created_at.asc", limit: 1000, offset });
+      linhas.push(...lote);
+      if (lote.length < 1000) return linhas;
+    }
   }
+
+  async function puxa() {
+    const [books, sessions, notes] = await Promise.all(ORDEM.map(leTudo));
+    let mudou = false;
+
+    const funde = (nome, remotos) => {
+      const t = TABELAS[nome], sombra = meta.shadow[nome];
+      const locais = new Map(t.lista().map(r => [r.id, r]));
+      const daServidor = new Set();
+      const saida = [];
+
+      for (const rem of remotos) {
+        daServidor.add(rem.id);
+        const local = locais.get(rem.id);
+        // Apagado aqui e ainda não apagado lá. Adotar o registro do servidor
+        // agora ressuscitaria o que o usuário acabou de excluir — a exclusão
+        // ainda não subiu, e a sombra é justamente a prova de que ele existia.
+        if (!local && sombra[rem.id] !== undefined) continue;
+        // Alterado aqui e ainda não enviado: o local manda, e a alteração
+        // sobe logo em seguida. Só assim editar offline não vira nada.
+        if (local && t.valido(local) && sombra[local.id] !== digital(t.linha(local))) { saida.push(local); continue; }
+        const novo = t.local(rem);
+        if (!local || digital(t.linha(novo)) !== digital(t.linha(local))) mudou = true;
+        sombra[rem.id] = digital(t.linha(novo));
+        saida.push(novo);
+      }
+
+      for (const local of t.lista()) {
+        if (daServidor.has(local.id)) continue;
+        if (sombra[local.id] === undefined) { saida.push(local); continue; }  // nasceu aqui, ainda vai subir
+        if (t.valido(local) && sombra[local.id] !== digital(t.linha(local))) { saida.push(local); continue; }
+        // Estava sincronizado, sumiu do servidor: apagaram em outro aparelho.
+        delete sombra[local.id];
+        mudou = true;
+      }
+      return saida;
+    };
+
+    const livros = funde("books", books);
+    const idsLivros = new Set(livros.map(b => b.id));
+    TABELAS.books.guarda(livros);
+    // Sessão ou nota sem livro não tem onde aparecer na tela; some junto.
+    TABELAS.sessions.guarda(funde("sessions", sessions).filter(s => idsLivros.has(s.bookId)));
+    TABELAS.notes.guarda(funde("notes", notes).filter(n => idsLivros.has(n.bookId)));
+
+    salvaMeta();
+    if (mudou) { aplicando = true; save(); aplicando = false; renderAll(); }
+    return mudou;
+  }
+
+  /* ================================================================= motor
+     Uma rodada por vez. Pedido que chega no meio de uma rodada não é
+     descartado — vira a próxima, senão a última tecla digitada seria
+     justamente a que não subiu. */
+  const deRede = e => /Failed to fetch|NetworkError|load failed|network/i.test((e && e.message) || "") ||
+                      (e && (e.status === 0 || e.status >= 500));
+
+  let rodando = null, pedidoNaFila = false, puxarNaFila = false, aplicando = false, agendado = null;
+  let contaSincronizada = null;
+  let situacao = { estado: "ocioso", erro: "" };
+
+  async function sincroniza(opcoes = {}) {
+    if (!Supa.user) return;
+    // Mudança feita no meio de uma rodada não entra nela — a lista do que
+    // subir já foi montada. Fica para a próxima, que é disparada aqui mesmo.
+    if (rodando) {
+      pedidoNaFila = true;
+      puxarNaFila = puxarNaFila || !opcoes.somenteSubida;
+      return rodando;
+    }
+
+    const esta = rodando = (async () => {
+      pinta_sync("indo");
+      try {
+        if (!opcoes.somenteSubida) await puxa();
+        await empurra();
+        meta.lastSync = Date.now();
+        salvaMeta();
+        pinta_sync("ok");
+      } catch (e) {
+        situacao.erro = e.message || String(e);
+        pinta_sync(deRede(e) ? "offline" : "erro");
+        console.warn("sincronia falhou:", e);
+      } finally {
+        rodando = null;
+      }
+    })();
+
+    await esta;
+    if (!pedidoNaFila) return;
+    pedidoNaFila = false;
+    const comDescida = puxarNaFila; puxarNaFila = false;
+    return sincroniza({ somenteSubida: !comDescida });
+  }
+
+  function pinta_sync(estado) {
+    situacao.estado = estado;
+    const el = $("syncStatus");
+    // Contar pendências percorre a estante inteira; fora do painel aberto,
+    // ninguém está olhando, e isso rodaria a cada tecla registrada.
+    if (!el || !dlg.open) return;
+    const n = contaPendentes();
+    const quando = meta.lastSync ? new Date(meta.lastSync).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : null;
+    el.textContent =
+      !Supa.user ? "Entre na conta para sincronizar."
+      : estado === "indo" ? "Sincronizando…"
+      : estado === "offline" ? `Sem conexão com o servidor. ${n} alteraç${n === 1 ? "ão" : "ões"} esperando — nada se perde, tento de novo sozinho.`
+      : estado === "erro" ? "Falhou: " + situacao.erro
+      : n ? `${n} alteraç${n === 1 ? "ão" : "ões"} para enviar.`
+      : quando ? `Tudo salvo na conta (${quando}).`
+      : "Automática: tudo que você registra sobe sozinho.";
+  }
+
+  /* Some mudanças vêm em rajada (registrar leitura mexe em livro e sessão).
+     Espera o dedo sair do teclado antes de falar com o servidor. */
+  function mudou() {
+    if (aplicando || !Supa.user) return;
+    pinta_sync(situacao.estado === "indo" ? "indo" : "ocioso");
+    clearTimeout(agendado);
+    agendado = setTimeout(() => sincroniza({ somenteSubida: true }), 1500);
+  }
+
+  window.Sync = {
+    mudou, agora: () => sincroniza(), pendentes: contaPendentes,
+    entrou: () => comecaSincronia()      // "esta conta assumiu este navegador"
+  };
+
+  // Antes de qualquer sincronia, e independente de ter conta: id local
+  // esquisito é problema deste navegador, não do servidor.
+  migraIds();
+
+  /* Primeira sincronia da sessão: cuida também da troca de conta. */
+  async function comecaSincronia() {
+    if (!Supa.user) return;
+
+    if (meta.userId && meta.userId !== Supa.user.id) {
+      // Estes dados são da conta anterior — e já estão salvos nela. Levá-los
+      // para a conta nova seria misturar a estante de duas pessoas.
+      //
+      // Menos o que ainda não tinha subido: isso não está salvo em lugar
+      // nenhum, e não há token da conta anterior para enviar agora. Fica
+      // guardado aqui, sem entrar na estante nova, em vez de evaporar.
+      const sobrando = contaPendentes();
+      if (sobrando) {
+        try {
+          localStorage.setItem("biblioteca.orfaos." + meta.userId, JSON.stringify({
+            salvoEm: new Date().toISOString(),
+            books: state.books, sessions: state.sessions, notes: state.notes
+          }));
+          toast(`${sobrando} alteraç${sobrando === 1 ? "ão" : "ões"} da conta anterior não tinham subido. ` +
+                `Guardei neste navegador em vez de misturar as estantes.`);
+        } catch (e) { console.warn("não consegui guardar os órfãos:", e); }
+      }
+      state.books = []; state.sessions = []; state.notes = []; state.timer = null;
+      meta.shadow = sombraVazia(); meta.quarentena = {}; meta.lastSync = 0;
+      aplicando = true; save(); aplicando = false; renderAll();
+    }
+    meta.userId = Supa.user.id;
+    salvaMeta();
+    await sincroniza();
+  }
+
+  // Voltar para o app, reconectar e trocar de aba são os momentos em que o
+  // outro aparelho pode ter mudado alguma coisa.
+  addEventListener("online", () => sincroniza());
+  addEventListener("visibilitychange", () => {
+    if (document.hidden) { if (Supa.user) sincroniza({ somenteSubida: true }); }
+    else if (Supa.user && Date.now() - meta.lastSync > 30000) sincroniza();
+  });
+  setInterval(() => { if (!document.hidden && Supa.user) sincroniza(); }, 5 * 60 * 1000);
 
   /* -------------------------------------------------------------------- UI
      Duas superfícies distintas: a tela cheia de entrada, para quem está de
@@ -219,9 +507,17 @@
   Supa.onChange((s, motivo) => {
     if (!s) {
       perfil = null;
+      contaSincronizada = null;
+      clearTimeout(agendado);
       if (dlg.open) dlg.close();
       abreTela("entrar");
       if (PORQUE_SAIU[motivo]) aviso(PORQUE_SAIU[motivo], "erro");
+    } else if (Supa.user && contaSincronizada !== Supa.user.id) {
+      // Entrar é o gatilho: é aqui que a estante da conta desce para este
+      // navegador e o que estava só aqui sobe. Sem isto, "minha conta" seria
+      // só um nome no cabeçalho.
+      contaSincronizada = Supa.user.id;
+      comecaSincronia();
     }
     pinta(s);
   });
@@ -231,6 +527,7 @@
     if (!Supa.ready) return toast("Backend não configurado.");
     if (Supa.session) {
       dlg.showModal();
+      pinta_sync(situacao.estado);
       if (!perfil) await carregaPerfil();
     } else {
       abreTela("entrar");
@@ -352,6 +649,10 @@
   });
 
   $("btnSair").addEventListener("click", async () => {
+    // Última subida antes de sair: o que ficou nos 1,5s de espera ainda não
+    // chegou ao servidor, e sair sem isso perderia a leitura recém-registrada.
+    clearTimeout(agendado);
+    if (contaPendentes()) { aviso("Salvando o que faltava…"); try { await sincroniza({ somenteSubida: true }); } catch (e) { } }
     await Supa.signOut();
     toast("Você saiu. Seus dados continuam neste navegador.");
     dlg.close();
@@ -374,22 +675,12 @@
     }
   });
 
-  $("btnEnviar").addEventListener("click", async () => {
-    if (!confirm("Enviar sua estante, sessões e anotações para a conta?")) return;
-    aviso("Enviando…");
-    try {
-      const r = await pushAll(p => aviso("Enviando " + p));
-      aviso(`Enviado: ${r.livros} livros, ${r.sessoes} sessões, ${r.notas} anotações.`, "ok");
-    } catch (err) { aviso("Falhou: " + err.message, "erro"); }
-  });
-
-  $("btnTrazer").addEventListener("click", async () => {
-    if (!confirm("Isso substitui os dados deste navegador pelos da conta. Continuar?")) return;
-    aviso("Baixando…");
-    try {
-      const r = await pullAll();
-      aviso(`Trazido: ${r.livros} livros, ${r.sessoes} sessões, ${r.notas} anotações.`, "ok");
-    } catch (err) { aviso("Falhou: " + err.message, "erro"); }
+  /* A sincronia acontece sozinha; este botão é para quem quer ver acontecer
+     agora — e para o caso de a conexão ter voltado antes do próximo ciclo. */
+  $("btnSincronizar").addEventListener("click", async () => {
+    const btn = $("btnSincronizar");
+    btn.disabled = true;
+    try { await sincroniza(); } finally { btn.disabled = false; }
   });
 
   /* Chegou de volta de um link de confirmação, recuperação ou OAuth. */

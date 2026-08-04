@@ -796,13 +796,9 @@ dialog#authDlg::backdrop,dialog#perfilDlg::backdrop{background:rgba(0,0,0,.45);b
       <div class="dlg-sep"></div>
 
       <h3 style="margin-bottom:8px">Sincronização</h3>
-      <p class="dlg-note" style="margin-bottom:12px">
-        Manual de propósito: sincronia automática precisa resolver conflito, e
-        conflito resolvido errado apaga leitura registrada.
-      </p>
+      <p class="dlg-note" style="margin-bottom:12px" id="syncStatus">Automática.</p>
       <div class="row" style="gap:8px">
-        <button class="btn" type="button" id="btnEnviar">Enviar para a conta</button>
-        <button class="btn" type="button" id="btnTrazer">Trazer da conta</button>
+        <button class="btn" type="button" id="btnSincronizar">Sincronizar agora</button>
       </div>
 
       <div class="dlg-sep"></div>
@@ -974,8 +970,17 @@ function load() {
 function save() {
   try { localStorage.setItem(KEY, JSON.stringify(state)); }
   catch (e) { toast("Não consegui salvar (armazenamento cheio?)"); }
+  // Salvar aqui é só metade: o navegador guarda, a conta é que leva junto
+  // para o outro aparelho. Quem faz a segunda metade é account.js.
+  if (window.Sync) Sync.mudou();
 }
-const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+
+/* O id local é o mesmo id do servidor — por isso é um uuid, e não uma string
+   qualquer. Enquanto cada navegador inventava o próprio id, o mesmo livro
+   virava dois no banco e nenhum aparelho reconhecia o registro do outro. */
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() :
+  ("10000000-1000-4000-8000-100000000000").replace(/[018]/g, c =>
+    (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)));
 
 /* =======================================================================
    Datas (sempre no fuso local — nada de UTC)
@@ -1778,7 +1783,7 @@ function esc(s) {
 }
 /* Versão visível na tela de entrada. Sem isso não há como saber, à distância,
    se o navegador está rodando o código publicado ou uma sobra de cache. */
-const APP_VERSION = "v15";
+const APP_VERSION = "v16";
 
 /* Nada de falhar calado. Um erro não tratado costuma virar "cliquei e não
    aconteceu nada", que é impossível de diagnosticar à distância. Melhor um
