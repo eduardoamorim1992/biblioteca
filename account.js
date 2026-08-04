@@ -20,6 +20,17 @@
 (() => {
   const $ = id => document.getElementById(id);
 
+  /* Declarado logo aqui, antes de qualquer outra coisa: migraIds() (bem
+     abaixo) pode chamar save() -> Sync.mudou() -> pinta_sync() já na carga
+     da página, sempre que o navegador abre com uma sessão ainda válida
+     guardada. pinta_sync() lê dlg.open. Um `const dlg` declarado mais adiante
+     no arquivo cai na zona morta temporal nesse caminho e o ReferenceError
+     aborta o resto do script — dlg, view e nenhum dos addEventListener de
+     login chega a existir. Quem sofria isso via a tela de entrada travada,
+     como se o app tivesse simplesmente parado de responder. */
+  const dlg = $("authDlg");
+  const view = $("authView");
+
   /* =================================================================== dados
      A sombra é a memória do que o servidor tem: id -> impressão digital da
      linha enviada. Com ela, três perguntas ficam respondíveis sem relógio e
@@ -229,11 +240,22 @@
     }
   }
 
-  /* ================================================================== descida */
+  /* ================================================================== descida
+     Filtro por dono aqui não é opcional. O RLS de `books` (e de `notes`
+     públicas) permite ler o que é seu OU o que pertence a qualquer perfil
+     público — de propósito, é o que alimenta "quem mais lê este livro" e o
+     feed. Sem o `owner=eq.<eu>` explícito, esta função herdava essa leitura
+     ampla: puxar "meus livros" trazia a estante de qualquer usuário com
+     perfil público junto, e funde() mesclava tudo como se fosse do dono da
+     sessão. Foi assim que uma conta nova apareceu com os livros de outra
+     pessoa — RLS decide o que É PERMITIDO ler, não o que É MEU, e só o
+     código sabe a diferença. */
   async function leTudo(nome) {
     const linhas = [];
     for (let offset = 0; ; offset += 1000) {
-      const lote = await Supa.select(nome, { order: "created_at.asc", limit: 1000, offset });
+      const lote = await Supa.select(nome, {
+        owner: "eq." + Supa.user.id, order: "created_at.asc", limit: 1000, offset
+      });
       linhas.push(...lote);
       if (lote.length < 1000) return linhas;
     }
@@ -434,9 +456,8 @@
 
   /* -------------------------------------------------------------------- UI
      Duas superfícies distintas: a tela cheia de entrada, para quem está de
-     fora, e o diálogo de conta, para quem já está dentro. Nunca as duas. */
-  const dlg = $("authDlg");
-  const view = $("authView");
+     fora, e o diálogo de conta, para quem já está dentro. Nunca as duas.
+     (dlg e view são declarados lá em cima, antes de migraIds().) */
   let perfil = null;
 
   const telaAberta = () => !view.hidden;
