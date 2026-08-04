@@ -290,6 +290,13 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;padding-right:0}
 @keyframes authIn{from{opacity:0}to{opacity:1}}
 @media(prefers-reduced-motion:reduce){.auth-screen{animation:none}}
 @media(max-width:860px){.auth-screen{grid-template-columns:1fr}}
+/* Canto inferior, fora do caminho, mas em toda largura de tela: sem a versão
+   à vista não há como saber, à distância, se o navegador está rodando o
+   código publicado ou uma sobra de cache. */
+.auth-versao{
+  position:absolute;right:12px;bottom:10px;z-index:2;
+  font-size:11px;color:var(--muted);opacity:.75;letter-spacing:.02em;
+}
 
 .auth-brand{
   position:relative;overflow:hidden;color:#fff;
@@ -933,6 +940,7 @@ dialog#authDlg::backdrop,dialog#perfilDlg::backdrop{background:rgba(0,0,0,.45);b
     </section>
 
   </main>
+  <span class="auth-versao" id="authVersao"></span>
 </div>
 
 <div id="toast"></div>
@@ -1784,6 +1792,7 @@ function esc(s) {
 /* Versão visível na tela de entrada. Sem isso não há como saber, à distância,
    se o navegador está rodando o código publicado ou uma sobra de cache. */
 const APP_VERSION = "v16";
+document.getElementById("authVersao").textContent = APP_VERSION;
 
 /* Nada de falhar calado. Um erro não tratado costuma virar "cliquei e não
    aconteceu nada", que é impossível de diagnosticar à distância. Melhor um
