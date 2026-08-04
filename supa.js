@@ -285,6 +285,34 @@ const Supa = (() => {
       })}&ol_key=in.(${lista})`);
     },
 
+    // ----------------------------------------------------------------- obra
+    /* A página do livro agrega por ol_key, sem tabela de obra canônica. Essa
+       tabela é a refatoração cara — juntar edições, reconciliar livro digitado
+       à mão com a Open Library — e nada aqui precisa dela para funcionar:
+       ol_key já é o que faz a edição dela e a dele serem o mesmo livro.
+
+       O RLS faz o recorte sozinho: books_read devolve o que é seu e o que é de
+       perfil público, então estante de perfil privado não entra na lista nem
+       na contagem. */
+    exemplaresDaObra(olKey) {
+      return auth(`/rest/v1/books?${qs({
+        select: "id,title,author,cover_url,pages,year,synopsis,status,rating,review,owner," +
+                "profiles(username,display_name,avatar_url)",
+        ol_key: "eq." + olKey,
+        limit: 100
+      })}`);
+    },
+
+    /** Média da obra. Vem de função porque ela conta a nota de gente cuja
+        estante eu não posso ler — o que sai é média e contagem, nunca quem
+        deu qual nota. */
+    async notaDaObra(olKey) {
+      const linhas = await auth("/rest/v1/rpc/book_rating", {
+        method: "POST", body: { p_ol_key: olKey }
+      });
+      return (linhas && linhas[0]) || { media: null, votos: 0 };
+    },
+
     // ------------------------------------------------------------------ feed
     /* Uma ida por tela. A função feed() no banco já devolve autor, livro,
        nota, contagem de curtidas, contagem de comentários e se fui eu que

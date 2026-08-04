@@ -221,18 +221,11 @@ const Social = (() => {
       btn.textContent = gente.length === 1
         ? "1 leitor também tem este livro"
         : `${gente.length} leitores também têm este livro`;
-      btn.addEventListener("click", () => mostraLeitoresDoLivro(cartao, gente));
+      // A lista solta virou página da obra: mesma pergunta, resposta completa.
+      btn.addEventListener("click", () =>
+        abreLivro(cartao.dataset.ol, cartao.querySelector(".t").textContent));
       alvo.after(btn);
     }
-  }
-
-  function mostraLeitoresDoLivro(cartao, gente) {
-    const dlg = $("perfilDlg");
-    $("perfilTitulo").textContent = cartao.querySelector(".t").textContent;
-    $("perfilCorpo").innerHTML =
-      `<p class="dlg-note" style="margin-bottom:10px">Leitores públicos com este livro na estante.</p>` +
-      gente.map(p => linhaLeitor(p)).join("");
-    if (!dlg.open) dlg.showModal();
   }
 
   /* ---------------------------------------------------------------- feed
@@ -310,7 +303,8 @@ const Social = (() => {
       <p class="fato-verbo">${(VERBO[f.kind] || (() => "fez algo"))(f)}</p>
 
       ${temLivro ? `
-        <div class="fato-livro">
+        <div class="fato-livro"${f.book_ol_key
+          ? ` data-obra="${esc(f.book_ol_key)}" style="cursor:pointer"` : ""}>
           ${capa(f)}
           <div style="min-width:0">
             <div class="t">${esc(f.book_title || tituloDoPayload(f))}</div>
@@ -488,6 +482,142 @@ const Social = (() => {
       await Supa.denunciar({ comentario, atividade, motivo: motivo.trim().slice(0, 500) });
       toast("Denúncia enviada. Obrigado por avisar.");
     } catch (e) { toast("Não consegui enviar: " + e.message); }
+  }
+
+  /* ------------------------------------------------------ página da obra
+     Agrega por ol_key, sem tabela de obra canônica. É o que fecha o laço que
+     faltava: ver no feed, abrir o livro, adicionar à estante. Antes disso o
+     feed era mural — dava para admirar e não dava para fazer nada. */
+
+  const ROTULO_STATUS = { lendo: "lendo", lido: "leu", fila: "na fila", abandonado: "abandonou" };
+
+  // Guardado entre a abertura da página e o clique em adicionar, para não
+  // refazer a consulta só para reler o título e a capa. Declarado aqui, antes
+  // de quem o usa, e não no fim do bloco.
+  const ultimosExemplares = {};
+
+  /* Cada exemplar traz o que o dono preencheu, e ninguém preenche tudo. A
+     página mostra o mais completo de cada campo, venha de quem vier — capa de
+     um, sinopse de outro. */
+  function metadadosDaObra(linhas, local) {
+    const fonte = [local, ...linhas].filter(Boolean);
+    const melhor = campo => {
+      for (const l of fonte) { const v = l[campo]; if (v) return v; }
+      return null;
+    };
+    return {
+      title: melhor("title") || "Livro",
+      author: melhor("author"),
+      cover: melhor("cover") || melhor("cover_url"),
+      pages: melhor("pages"),
+      year: melhor("year"),
+      synopsis: melhor("synopsis")
+    };
+  }
+
+  async function abreLivro(olKey, tituloProvisorio) {
+    if (!olKey) return;
+    const dlg = $("livroDlg");
+    $("livroTitulo").textContent = tituloProvisorio || "Livro";
+    $("livroCorpo").innerHTML = vazio("Carregando…");
+    if (!dlg.open) dlg.showModal();
+
+    let exemplares = [], nota = { media: null, votos: 0 };
+    try {
+      // Em paralelo: a lista sai do RLS, a média sai da função. São recortes
+      // diferentes de propósito — a média conta quem eu não posso listar.
+      [exemplares, nota] = await Promise.all([
+        Supa.exemplaresDaObra(olKey),
+        Supa.notaDaObra(olKey).catch(() => ({ media: null, votos: 0 }))
+      ]);
+    } catch (e) {
+      $("livroCorpo").innerHTML = vazio("Não consegui abrir este livro: " + esc(e.message));
+      return;
+    }
+
+    ultimosExemplares[olKey] = exemplares;
+    const meu = (typeof state !== "undefined" && state.books.find(b => b.olKey === olKey)) || null;
+    const meta = metadadosDaObra(exemplares, meu);
+    $("livroTitulo").textContent = meta.title;
+
+    const eu = Supa.user && Supa.user.id;
+    const outros = exemplares.filter(l => l.owner !== eu && l.profiles);
+    const resenhas = outros.filter(l => l.rating);
+
+    const detalhe = [meta.author, meta.year, meta.pages ? meta.pages + " págs" : null]
+      .filter(Boolean).join(" · ");
+
+    $("livroCorpo").innerHTML = `
+      <div class="obra-topo">
+        <div class="obra-capa">${meta.cover
+          ? `<img src="${esc(meta.cover)}" alt="" loading="lazy" onerror="this.remove()">`
+          : esc(meta.title.trim().charAt(0).toUpperCase())}</div>
+        <div class="obra-meta">
+          <h3>${esc(meta.title)}</h3>
+          <div class="autor">${esc(detalhe)}</div>
+          ${nota.votos ? `
+            <div class="obra-media">
+              ${estrelasFeed(Math.round(nota.media))}
+              <b>${nota.media}</b>
+              <span>${nota.votos} ${nota.votos === 1 ? "avaliação" : "avaliações"}</span>
+            </div>`
+          : `<div class="obra-media"><span>ainda sem avaliações</span></div>`}
+          <div style="margin-top:11px">${botaoEstante(olKey, meu)}</div>
+        </div>
+      </div>
+
+      ${meta.synopsis ? `<p class="obra-sinopse">${esc(meta.synopsis)}</p>` : ""}
+
+      ${outros.length ? `
+        <div class="obra-secao">Quem mais tem este livro</div>
+        ${outros.map(l => linhaLeitor(
+            { id: l.owner, ...l.profiles },
+            { numero: `<span class="chip-status">${ROTULO_STATUS[l.status] || l.status}</span>` }
+          )).join("")}` : ""}
+
+      ${resenhas.length ? `
+        <div class="obra-secao">Resenhas</div>
+        ${resenhas.map(l => `
+          <div class="obra-resenha">
+            <div class="obra-resenha-topo">
+              ${avatar(l.profiles)}
+              <div class="leitor-id">
+                <b data-perfil="${esc(l.profiles.username)}">${esc(l.profiles.display_name || l.profiles.username)}</b>
+                <span>${estrelasFeed(l.rating)}</span>
+              </div>
+            </div>
+            ${l.review ? `<div class="obra-resenha-txt">${esc(l.review)}</div>` : ""}
+          </div>`).join("")}` : ""}
+
+      ${!outros.length && !resenhas.length
+        ? `<p class="dlg-note" style="margin-top:14px">Ninguém por aqui registrou este livro ainda. Se você adicionar, é o primeiro.</p>`
+        : ""}`;
+  }
+
+  function botaoEstante(olKey, meu) {
+    if (meu) {
+      return `<span class="chip-status">já na sua estante · ${ROTULO_STATUS[meu.status] || meu.status}</span>`;
+    }
+    return `<button class="btn sm primary" data-add-obra="${esc(olKey)}">Adicionar à minha estante</button>`;
+  }
+
+  /** Adiciona à estante local com os metadados que a página já tem em mãos.
+      Vai para a fila, nunca direto para "lendo": quem adiciona está anotando
+      interesse, não começando a ler agora. */
+  function adicionaObra(olKey, botao) {
+    if (typeof state === "undefined") return;
+    if (state.books.some(b => b.olKey === olKey)) return toast("Este livro já está na sua estante.");
+    const linhas = ultimosExemplares[olKey] || [];
+    const meta = metadadosDaObra(linhas, null);
+    state.books.push({
+      id: uid(), title: meta.title, author: meta.author || "", pages: meta.pages || 0,
+      current: 0, status: "fila", priority: 1, cover: meta.cover || null,
+      year: meta.year || null, isbn: null, olKey, synopsis: meta.synopsis || null,
+      addedAt: todayISO(), startedAt: null, finishedAt: null, rating: null, review: null
+    });
+    save(); renderAll();
+    if (botao) botao.outerHTML = `<span class="chip-status">já na sua estante · na fila</span>`;
+    toast("Adicionado à sua estante.");
   }
 
   /* -------------------------------------------------- notificações
@@ -672,6 +802,7 @@ const Social = (() => {
   $("rankPeriodo").addEventListener("change", ranking);
   $("rankMetrica").addEventListener("change", ranking);
   $("perfilClose").addEventListener("click", () => $("perfilDlg").close());
+  $("livroClose").addEventListener("click", () => $("livroDlg").close());
   $("sinoBtn").addEventListener("click", abreNotificacoes);
   $("notifClose").addEventListener("click", () => $("notifDlg").close());
 
@@ -701,6 +832,12 @@ const Social = (() => {
 
     const denAtv = e.target.closest("[data-denunciar]");
     if (denAtv) return denuncia({ atividade: denAtv.dataset.denunciar });
+
+    const obra = e.target.closest("[data-obra]");
+    if (obra) return abreLivro(obra.dataset.obra);
+
+    const addObra = e.target.closest("[data-add-obra]");
+    if (addObra) return adicionaObra(addObra.dataset.addObra, addObra);
 
     const escopo = e.target.closest("[data-escopo]");
     if (escopo) {
@@ -771,5 +908,5 @@ const Social = (() => {
      sem ele, assume público, que é o padrão do cadastro. */
   const souPrivado = () => !!(meuPerfil && meuPerfil.is_private);
 
-  return { enriquecerEstante, abrePerfil, ranking, souPrivado };
+  return { enriquecerEstante, abrePerfil, abreLivro, ranking, souPrivado };
 })();
