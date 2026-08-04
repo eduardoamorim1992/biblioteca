@@ -269,8 +269,18 @@ const Social = (() => {
     note:     f => f.note_kind === "quote"
                      ? `guardou uma citação${f.book_title ? ` de <b>${esc(f.book_title)}</b>` : ""}`
                      : `anotou algo${f.book_title ? ` sobre <b>${esc(f.book_title)}</b>` : ""}`,
-    progress: f => `avançou em <b>${esc(f.book_title || tituloDoPayload(f))}</b>`
+    progress: f => `avançou em <b>${esc(f.book_title || tituloDoPayload(f))}</b>`,
+    review:   f => `avaliou <b>${esc(f.book_title || tituloDoPayload(f))}</b>`
   };
+
+  /* A nota vem da linha do livro; se o livro foi apagado, sobra a que viajou
+     no payload no momento da publicação. */
+  const notaDoFato = f => f.book_rating || (f.payload && f.payload.rating) || 0;
+
+  function estrelasFeed(n) {
+    if (!n) return "";
+    return `<span class="nota" title="${n} de 5">${"★".repeat(n)}<span class="vazia">${"★".repeat(5 - n)}</span></span>`;
+  }
 
   // O livro pode ter sido apagado depois; o título viajou junto na atividade
   // justamente para o fato não virar "terminou de ler (nada)".
@@ -306,8 +316,12 @@ const Social = (() => {
             <div class="t">${esc(f.book_title || tituloDoPayload(f))}</div>
             <div class="a">${esc(f.book_author || (f.payload && f.payload.author) || "")}${
               f.book_pages ? ` · ${f.book_pages} págs` : ""}</div>
+            ${estrelasFeed(notaDoFato(f))}
           </div>
         </div>` : ""}
+
+      ${f.kind === "review" && f.book_review
+        ? `<div class="fato-resenha">${esc(f.book_review)}</div>` : ""}
 
       ${f.note_body ? `
         <div class="fato-citacao ${f.note_kind === "quote" ? "quote" : ""}">${esc(f.note_body)}${
@@ -655,5 +669,10 @@ const Social = (() => {
     }
   });
 
-  return { enriquecerEstante, abrePerfil, ranking };
+  /* O diálogo de resenha pergunta isto para avisar que resenha de perfil
+     privado não vira notícia nem entra em média. Vem do perfil já carregado;
+     sem ele, assume público, que é o padrão do cadastro. */
+  const souPrivado = () => !!(meuPerfil && meuPerfil.is_private);
+
+  return { enriquecerEstante, abrePerfil, ranking, souPrivado };
 })();

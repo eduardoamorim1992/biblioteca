@@ -474,6 +474,31 @@ dialog#authDlg::backdrop,dialog#perfilDlg::backdrop{background:rgba(0,0,0,.45);b
 .perfil-num span{font-size:11px;color:var(--muted)}
 .perfil-bio{font-size:13.5px;color:var(--text-2);line-height:1.55;margin-bottom:12px}
 
+/* ---------- resenha ---------- */
+/* Estrelas em botão de verdade, não em <span> com onclick: teclado e leitor
+   de tela precisam alcançar a nota tanto quanto o mouse. */
+.estrelas{display:flex;gap:3px;align-items:center}
+.estrelas button{
+  background:none;border:0;padding:2px;cursor:pointer;line-height:1;
+  font-size:30px;color:var(--border);transition:color .12s,transform .12s;
+}
+.estrelas button:hover{transform:scale(1.12)}
+.estrelas button[data-on="1"]{color:#e8a33d}
+.estrelas:focus-within button:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+.estrelas-rotulo{margin-left:8px;font-size:13px;color:var(--muted)}
+
+/* Estrelas só de leitura, no card e no feed. */
+.nota{color:#e8a33d;font-size:13px;letter-spacing:1px;white-space:nowrap}
+.nota .vazia{color:var(--border)}
+.book-resenha{
+  margin-top:7px;font-size:13px;color:var(--text-2);line-height:1.5;
+  border-left:2px solid var(--border);padding-left:9px;
+}
+.fato-resenha{
+  margin-top:9px;font-size:14px;color:var(--text);line-height:1.6;
+  background:var(--surface-2);border-radius:10px;padding:11px 13px;
+}
+
 /* ---------- feed ---------- */
 /* Segmentado próprio: o <select> nativo some no meio do cartão e, aqui, a
    escolha entre a própria roda e a praça pública é a coisa mais importante
@@ -901,6 +926,37 @@ dialog#authDlg::backdrop,dialog#perfilDlg::backdrop{background:rgba(0,0,0,.45);b
   <div class="dlg-body" id="perfilCorpo"></div>
 </dialog>
 
+<dialog id="resenhaDlg">
+  <div class="dlg-head">
+    <h2 id="resenhaTitulo">Avaliar</h2>
+    <button class="icon-btn" id="resenhaClose" aria-label="Fechar">✕</button>
+  </div>
+  <form class="dlg-body" id="formResenha">
+    <input type="hidden" id="resenhaId">
+    <div class="field">
+      <label id="resenhaNotaLabel">Sua nota</label>
+      <div class="estrelas" role="group" aria-labelledby="resenhaNotaLabel">
+        <button type="button" data-estrela="1" aria-label="1 estrela">★</button>
+        <button type="button" data-estrela="2" aria-label="2 estrelas">★</button>
+        <button type="button" data-estrela="3" aria-label="3 estrelas">★</button>
+        <button type="button" data-estrela="4" aria-label="4 estrelas">★</button>
+        <button type="button" data-estrela="5" aria-label="5 estrelas">★</button>
+        <span class="estrelas-rotulo" id="resenhaNotaTexto">toque para dar a nota</span>
+      </div>
+    </div>
+    <div class="field" style="margin-top:14px">
+      <label for="resenhaTexto">O que você achou <span style="font-weight:400">(opcional)</span></label>
+      <textarea id="resenhaTexto" maxlength="4000" style="min-height:120px"
+        placeholder="O que ficou de você depois de fechar o livro?"></textarea>
+    </div>
+    <p class="dlg-note" id="resenhaAviso" style="margin-top:10px"></p>
+    <div class="row" style="margin-top:14px;gap:8px">
+      <button class="btn primary" type="submit" style="flex:1">Salvar</button>
+      <button class="btn ghost" type="button" id="resenhaApagar">Remover nota</button>
+    </div>
+  </form>
+</dialog>
+
 <dialog id="authDlg">
   <div class="dlg-head">
     <h2>Sua conta</h2>
@@ -1241,12 +1297,85 @@ function logSession({ bookId, date, stopPage, pages, minutes }) {
 
 function setStatus(id, status) {
   const b = bookById(id); if (!b) return;
+  const eraLido = b.status === "lido";
   b.status = status;
   if (status === "lendo" && !b.startedAt) b.startedAt = todayISO();
   if (status === "lido") { b.finishedAt = b.finishedAt || todayISO(); if (b.pages) b.current = b.pages; }
   if (status !== "lido") b.finishedAt = null;
   save(); renderAll();
+  // Fechar o livro é o instante em que a opinião está mais fresca — e o único
+  // em que pedir a nota não é interrupção. Depois disso, só se a pessoa pedir.
+  if (status === "lido" && !eraLido && !b.rating) abreResenha(id);
 }
+
+/* =======================================================================
+   Resenha
+   ======================================================================= */
+const NOTA_TEXTO = { 1: "não gostei", 2: "fraco", 3: "bom", 4: "muito bom", 5: "excelente" };
+
+/** Estrelas só de leitura, para card e feed. */
+function estrelas(n) {
+  if (!n) return "";
+  return `<span class="nota" title="${n} de 5">${"★".repeat(n)}<span class="vazia">${"★".repeat(5 - n)}</span></span>`;
+}
+
+let resenhaNota = 0;
+
+function pintaEstrelas() {
+  document.querySelectorAll("#formResenha [data-estrela]").forEach(b => {
+    b.dataset.on = +b.dataset.estrela <= resenhaNota ? "1" : "0";
+  });
+  document.getElementById("resenhaNotaTexto").textContent =
+    resenhaNota ? NOTA_TEXTO[resenhaNota] : "toque para dar a nota";
+}
+
+function abreResenha(id) {
+  const b = bookById(id); if (!b) return;
+  document.getElementById("resenhaId").value = id;
+  document.getElementById("resenhaTitulo").textContent = b.title;
+  document.getElementById("resenhaTexto").value = b.review || "";
+  resenhaNota = b.rating || 0;
+  pintaEstrelas();
+  // Resenha de perfil privado não vira notícia nem entra em média nenhuma;
+  // dizer isso aqui evita a sensação de ter escrito para ninguém.
+  const priv = typeof Social !== "undefined" && Social.souPrivado && Social.souPrivado();
+  document.getElementById("resenhaAviso").textContent = priv
+    ? "Seu perfil está privado: esta resenha fica só para você."
+    : "Sua resenha aparece no feed de quem te segue e entra na média do livro.";
+  document.getElementById("resenhaApagar").hidden = !b.rating;
+  document.getElementById("resenhaDlg").showModal();
+}
+
+document.getElementById("formResenha").addEventListener("click", e => {
+  const s = e.target.closest("[data-estrela]");
+  if (!s) return;
+  // Tocar de novo na mesma estrela limpa: é como se desfaz sem procurar botão.
+  resenhaNota = resenhaNota === +s.dataset.estrela ? 0 : +s.dataset.estrela;
+  pintaEstrelas();
+});
+
+document.getElementById("formResenha").addEventListener("submit", e => {
+  e.preventDefault();
+  const b = bookById(document.getElementById("resenhaId").value); if (!b) return;
+  const texto = document.getElementById("resenhaTexto").value.trim();
+  if (!resenhaNota && texto) return toast("Dê uma nota junto com o texto.");
+  b.rating = resenhaNota || null;
+  b.review = texto || null;
+  save(); renderAll();
+  document.getElementById("resenhaDlg").close();
+  toast(resenhaNota ? "Resenha salva." : "Resenha removida.");
+});
+
+document.getElementById("resenhaApagar").addEventListener("click", () => {
+  const b = bookById(document.getElementById("resenhaId").value); if (!b) return;
+  b.rating = null; b.review = null;
+  save(); renderAll();
+  document.getElementById("resenhaDlg").close();
+  toast("Nota removida.");
+});
+
+document.getElementById("resenhaClose").addEventListener("click", () =>
+  document.getElementById("resenhaDlg").close());
 function removeBook(id) {
   const b = bookById(id); if (!b) return;
   const n = sessionsOf(id).length;
@@ -1634,6 +1763,7 @@ function bookCard(b, compact) {
   else if (cur) foot.push(`<span><b>${cur}</b> págs lidas</span>`);
   if (f) foot.push(`<span>termina por volta de <b>${fmtDate(f.date)}</b> (${f.days} d)</span>`);
   if (b.status === "lido" && b.finishedAt) foot.push(`<span>concluído em <b>${fmtDate(b.finishedAt)}</b></span>`);
+  if (b.rating) foot.push(estrelas(b.rating));
   if (stats.length) foot.push(`<span>${stats.length} ${stats.length === 1 ? "sessão" : "sessões"} · ${sum(stats, s => s.minutes)} min</span>`);
   if (b.status === "fila") foot.push(`<span>prioridade <b>${prioLabel(b.priority)}</b></span>`);
 
@@ -1642,6 +1772,8 @@ function bookCard(b, compact) {
   if (b.status === "lendo") acts.push(`<button class="btn sm" data-status="lido" data-id="${b.id}">Concluir</button>`);
   if (b.status === "lendo") acts.push(`<button class="btn sm" data-status="abandonado" data-id="${b.id}">Abandonar</button>`);
   if (b.status === "lido") acts.push(`<button class="btn sm" data-status="lendo" data-id="${b.id}">Reabrir</button>`);
+  if (b.status === "lido" || b.status === "abandonado")
+    acts.push(`<button class="btn sm" data-resenha="${b.id}">${b.rating ? "Editar nota" : "Avaliar"}</button>`);
   if (!compact) {
     acts.push(`<button class="btn sm" data-edit="${b.id}">Editar</button>`);
     acts.push(`<button class="btn sm danger" data-del-book="${b.id}">Excluir</button>`);
@@ -1661,6 +1793,7 @@ function bookCard(b, compact) {
       <div class="a">${esc(author)} · <span class="chip" data-s="${b.status}"><i class="bullet"></i>${statusLabel(b.status)}</span></div>
       ${total ? `<div class="bar"><i style="width:${pct}%;background:${spine}"></i></div>` : ""}
       <div class="book-foot">${foot.join("")}</div>
+      ${!compact && b.review ? `<p class="book-resenha">${esc(b.review)}</p>` : ""}
       ${!compact && b.synopsis ? `<p class="synopsis" title="${esc(b.synopsis)}">${esc(b.synopsis)}</p>` : ""}
     </div>
     <div class="acts">${acts.join("")}</div>
@@ -1925,7 +2058,7 @@ function esc(s) {
 }
 /* Versão visível na tela de entrada. Sem isso não há como saber, à distância,
    se o navegador está rodando o código publicado ou uma sobra de cache. */
-const APP_VERSION = "v18";
+const APP_VERSION = "v19";
 document.getElementById("authVersao").textContent = APP_VERSION;
 
 /* Nada de falhar calado. Um erro não tratado costuma virar "cliquei e não
@@ -2100,10 +2233,11 @@ document.addEventListener("click", e => {
     return;
   }
 
-  const t = e.target.closest("[data-status],[data-edit],[data-del-book],[data-del-session],[data-del-note]");
+  const t = e.target.closest("[data-status],[data-edit],[data-resenha],[data-del-book],[data-del-session],[data-del-note]");
   if (!t) return;
 
   if (t.dataset.status) return setStatus(t.dataset.id, t.dataset.status);
+  if (t.dataset.resenha) return abreResenha(t.dataset.resenha);
   if (t.dataset.delBook) return removeBook(t.dataset.delBook);
 
   if (t.dataset.edit) {

@@ -81,7 +81,9 @@
       ol_key: b.olKey || null,
       synopsis: b.synopsis || null,
       started_at: b.startedAt || null,
-      finished_at: b.finishedAt || null
+      finished_at: b.finishedAt || null,
+      rating: limite(b.rating, 1, 5),
+      review: b.review ? String(b.review).slice(0, 4000) : null
     };
   };
   const sessionRow = s => ({
@@ -100,7 +102,8 @@
     cover: r.cover_url || null, year: r.year || null, isbn: r.isbn || null,
     olKey: r.ol_key || null, synopsis: r.synopsis || null,
     addedAt: (r.created_at || "").slice(0, 10) || todayISO(),
-    startedAt: r.started_at || null, finishedAt: r.finished_at || null
+    startedAt: r.started_at || null, finishedAt: r.finished_at || null,
+    rating: r.rating || null, review: r.review || null
   });
   const sessionLocal = r => ({
     id: r.id, bookId: r.book_id, date: r.date, pages: r.pages || 0,
@@ -221,7 +224,7 @@
           await Supa.upsert(nome, lote.map(x => Object.assign({ id: x.id, owner: Supa.user.id }, x.linha)));
           lote.forEach(x => { meta.shadow[nome][x.id] = x.h; });
         } catch (e) {
-          if (deRede(e)) throw e;
+          if (naoEhCulpaDoRegistro(e)) throw e;
           // O lote caiu por causa de alguma linha; descobre qual mandando uma
           // a uma, para que um registro problemático não segure os outros.
           for (const x of lote) {
@@ -229,7 +232,7 @@
               await Supa.upsert(nome, [Object.assign({ id: x.id, owner: Supa.user.id }, x.linha)]);
               meta.shadow[nome][x.id] = x.h;
             } catch (e2) {
-              if (deRede(e2)) throw e2;
+              if (naoEhCulpaDoRegistro(e2)) throw e2;
               meta.quarentena[nome + ":" + x.id] = x.h;
               console.warn("registro recusado pelo servidor:", nome, x.id, e2.message);
             }
@@ -317,12 +320,37 @@
   const deRede = e => /Failed to fetch|NetworkError|load failed|network/i.test((e && e.message) || "") ||
                       (e && (e.status === 0 || e.status >= 500));
 
+  /* Coluna que o app manda e o banco ainda não tem. Acontece na janela entre
+     publicar uma versão nova e rodar o SQL dela: a Vercel publica no push, o
+     SQL roda quando alguém abre o painel.
+     Isto é falha temporária do servidor, não registro defeituoso — tratá-la
+     como defeito mandaria a estante inteira para a quarentena, onde cada
+     livro ficaria parado até ser editado à mão. Um livro por vez, em
+     silêncio, e o usuário só descobre quando faltar algo em outro aparelho. */
+  const deEsquema = e => (e && e.code === "PGRST204") ||
+                         /column .* does not exist|schema cache|find the .* column/i.test((e && e.message) || "");
+  const naoEhCulpaDoRegistro = e => deRede(e) || deEsquema(e);
+
   let rodando = null, pedidoNaFila = false, puxarNaFila = false, aplicando = false, agendado = null;
   let contaSincronizada = null;
+  let quarentenaRevista = false;
   let situacao = { estado: "ocioso", erro: "" };
 
   async function sincroniza(opcoes = {}) {
     if (!Supa.user) return;
+
+    /* A quarentena é chaveada pela impressão digital: registro recusado uma
+       vez fica parado até alguém editá-lo. Isso é certo para linha realmente
+       defeituosa, e errado para tudo que foi recusado por causa temporária —
+       coluna que ainda não existia, gatilho com defeito, política apertada
+       demais. Corrigido o servidor, o registro continuaria preso, e ninguém
+       edita um livro só para destravar uma sincronia que não sabe que parou.
+       Uma nova tentativa por sessão: custa um envio e devolve o que voltou a
+       ser aceito. O que ainda for defeituoso volta para a quarentena. */
+    if (!quarentenaRevista) {
+      quarentenaRevista = true;
+      if (Object.keys(meta.quarentena).length) { meta.quarentena = {}; salvaMeta(); }
+    }
     // Mudança feita no meio de uma rodada não entra nela — a lista do que
     // subir já foi montada. Fica para a próxima, que é disparada aqui mesmo.
     if (rodando) {
