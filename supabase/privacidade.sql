@@ -1,0 +1,46 @@
+-- Biblioteca — fecha o grafo de seguidores
+--
+-- Como aplicar: painel do Supabase -> SQL Editor -> cole este arquivo -> Run.
+-- Idempotente: pode rodar de novo sem quebrar. Roda depois de schema.sql.
+--
+-- ===========================================================================
+-- O problema
+-- ===========================================================================
+--
+-- A política era `using (true)`. A chave anônima vai no navegador de todo
+-- visitante — ela é publicável por natureza, e é o RLS que protege os dados.
+-- Com `true`, bastava pedir para receber o grafo social inteiro, sem login:
+--
+--   GET /rest/v1/follows?select=follower,following,created_at
+--   [{"follower":"0cf0e9ce…","following":"5dce1a8f…","created_at":"…"}]
+--
+-- Quem segue quem, com horário, inclusive de perfil privado — justamente o
+-- dado que perfil privado existe para esconder. Com dois usuários isso é
+-- irrelevante; com quinhentos é um vazamento que não se desfaz, porque quem
+-- copiou já copiou.
+--
+-- ===========================================================================
+-- A regra nova
+-- ===========================================================================
+--
+-- Você enxerga as relações das quais faz parte: quem você segue, e quem
+-- segue você. Nada além disso.
+--
+-- Isso é suficiente para o app inteiro porque nenhuma tela lê o grafo de
+-- terceiros diretamente:
+--
+--   - o cliente só consulta follows com `follower = eu` (montar os botões);
+--   - as contagens de seguidores no perfil vêm de reader_card();
+--   - o filtro "de quem eu sigo" no feed vem de feed().
+--
+-- As duas são SECURITY DEFINER: rodam com os privilégios de quem as criou e
+-- não passam pelo RLS. Elas continuam contando o grafo inteiro — o que sai
+-- delas é sempre agregado (um número) ou já filtrado pela fronteira de
+-- privacidade que elas mesmas aplicam. É a diferença entre "quantos te
+-- seguem" e "quem te segue": o primeiro é público, o segundo não.
+--
+-- `following = auth.uid()` também é o que vai permitir, sem mexer aqui de
+-- novo, a tela de "quem me segue" — hoje o perfil mostra só a contagem.
+drop policy if exists follows_read on follows;
+create policy follows_read on follows for select
+  using (follower = auth.uid() or following = auth.uid());

@@ -3,6 +3,13 @@
 -- Como aplicar: painel do Supabase -> SQL Editor -> cole este arquivo -> Run.
 -- É idempotente no que dá: pode rodar de novo sem quebrar.
 --
+-- ATENÇÃO, na ordem: este arquivo é a base, e os outros vêm DEPOIS dele —
+-- feed.sql, privacidade.sql, resenhas.sql. Rodar este aqui de novo, sozinho,
+-- reverte o que veio depois: a função on_book_status_change() abaixo é a
+-- versão antiga, e feed.sql a substitui por uma que não transforma uma
+-- estante importada em quarenta notícias falsas. Se rodar este, rode os
+-- outros na sequência.
+--
 -- Princípio de privacidade adotado aqui: o que é agregado é público,
 -- o que é granular é privado. Ninguém vê a que horas você leu nem
 -- quantos minutos gastou em cada sessão; vê o total, o ranking e o que
@@ -362,9 +369,16 @@ drop policy if exists notes_owner on notes;
 create policy notes_owner on notes for all
   using (owner = auth.uid()) with check (owner = auth.uid());
 
--- Seguidores: visíveis a todos; só você cria e desfaz os seus.
+-- Seguidores: você vê as relações das quais faz parte — quem você segue e
+-- quem segue você. Só você cria e desfaz os seus.
+--
+-- Já foi `using (true)`, e isso entregava o grafo social inteiro a qualquer
+-- um com a chave anônima, sem login, inclusive o de perfis privados. As
+-- contagens do perfil e o filtro do feed não dependem desta política: vêm de
+-- reader_card() e feed(), que são SECURITY DEFINER. Ver supabase/privacidade.sql.
 drop policy if exists follows_read on follows;
-create policy follows_read on follows for select using (true);
+create policy follows_read on follows for select
+  using (follower = auth.uid() or following = auth.uid());
 
 drop policy if exists follows_write on follows;
 create policy follows_write on follows for insert
