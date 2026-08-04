@@ -362,6 +362,27 @@ const Supa = (() => {
       });
     },
 
+    // -------------------------------------------------------- notificações
+    /* Quem escreve notificação é o banco, por gatilho. O cliente só lê as
+       suas e marca como lidas — não existe política de INSERT aqui, então
+       nem se quisesse daria para plantar aviso no nome de outra pessoa. */
+    notificacoes(limit = 30) {
+      return auth("/rest/v1/rpc/notificacoes", { method: "POST", body: { p_limit: limit } });
+    },
+
+    naoLidas() {
+      return auth("/rest/v1/rpc/nao_lidas", { method: "POST", body: {} });
+    },
+
+    /** Marca tudo como lido. Um PATCH filtrado é uma ida só, e a condição de
+        dono é redundante com o RLS de propósito: filtro errado aqui vira
+        engano visível, não escrita indevida. */
+    marcarLidas() {
+      return auth(`/rest/v1/notifications?${qs({
+        user_id: "eq." + session.user.id, read_at: "is.null"
+      })}`, { method: "PATCH", body: { read_at: new Date().toISOString() } });
+    },
+
     // --------------------------------------------------------------- ranking
     leaderboard(period = "month", metric = "pages", limit = 50) {
       return raw("/rest/v1/rpc/leaderboard", {

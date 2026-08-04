@@ -490,6 +490,92 @@ const Social = (() => {
     } catch (e) { toast("Não consegui enviar: " + e.message); }
   }
 
+  /* -------------------------------------------------- notificações
+     Sem isto, seguir, curtir e comentar não voltavam para ninguém: a
+     interação acontecia e o outro lado nunca ficava sabendo. */
+
+  let naoLidas = 0;
+
+  function pintaSino() {
+    const btn = $("sinoBtn"), n = $("sinoN");
+    if (!btn) return;
+    btn.hidden = !Supa.user;
+    n.hidden = !naoLidas;
+    n.textContent = naoLidas > 9 ? "9+" : String(naoLidas);
+    // "notificação" faz plural em -ões, não em -s: grudar um "s" no fim gera
+    // "notificaçãos". Palavra de plural irregular se escreve por extenso.
+    btn.title = !naoLidas ? "Notificações"
+      : naoLidas === 1 ? "1 notificação não lida"
+      : `${naoLidas} notificações não lidas`;
+  }
+
+  async function contaNaoLidas() {
+    if (!Supa.user) { naoLidas = 0; pintaSino(); return; }
+    try {
+      naoLidas = (await Supa.naoLidas()) || 0;
+    } catch (e) {
+      // Função ainda não aplicada no banco, ou rede fora: sino sem número é
+      // melhor do que erro na cara de quem só queria ler.
+      naoLidas = 0;
+      console.warn("não lidas:", e.message);
+    }
+    pintaSino();
+  }
+
+  const VERBO_NOTIF = {
+    follow:  () => "começou a seguir você",
+    like:    n => `curtiu ${sobreOQue(n)}`,
+    comment: n => `comentou ${sobreOQue(n)}`
+  };
+
+  // "seu registro de Torto Arado" lê melhor do que "sua atividade #4f2a".
+  function sobreOQue(n) {
+    if (n.book_title) {
+      const q = n.activity_kind === "review" ? "sua resenha de"
+              : n.activity_kind === "finished" ? "quando você terminou"
+              : n.activity_kind === "started" ? "quando você começou"
+              : "seu registro de";
+      return `${q} <b>${esc(n.book_title)}</b>`;
+    }
+    return "algo que você publicou";
+  }
+
+  function linhaNotif(n) {
+    const p = { username: n.username, display_name: n.display_name, avatar_url: n.avatar_url };
+    return `
+    <div class="notif" data-nova="${n.read_at ? 0 : 1}">
+      ${avatar(p)}
+      <div class="notif-corpo">
+        <b data-perfil="${esc(n.username)}">${esc(n.display_name || n.username)}</b>
+        ${(VERBO_NOTIF[n.kind] || (() => "interagiu"))(n)}
+        ${n.comment_body ? `<div class="notif-citacao">“${esc(n.comment_body)}”</div>` : ""}
+        <span class="notif-quando">${quando(n.created_at)}</span>
+      </div>
+    </div>`;
+  }
+
+  async function abreNotificacoes() {
+    const dlg = $("notifDlg"), corpo = $("notifCorpo");
+    corpo.innerHTML = vazio("Carregando…");
+    if (!dlg.open) dlg.showModal();
+    try {
+      const linhas = await Supa.notificacoes(30);
+      corpo.innerHTML = linhas.length
+        ? linhas.map(linhaNotif).join("")
+        : vazio("Nada por aqui ainda. Quando alguém seguir você, curtir ou " +
+                "comentar o que você registrou, aparece nesta caixa.");
+      // Marcar como lida só depois de mostrar: se o pedido falhar, o número
+      // continua lá, que é o certo — some quando de fato foi visto e gravado.
+      if (linhas.some(l => !l.read_at)) {
+        try { await Supa.marcarLidas(); naoLidas = 0; pintaSino(); } catch (e) { console.warn(e); }
+      }
+    } catch (e) {
+      corpo.innerHTML = vazio(/PGRST202|Could not find the function/i.test(e.message || "")
+        ? "As notificações ainda não foram ligadas neste banco. Rode <b>supabase/notificacoes.sql</b> no SQL Editor do Supabase."
+        : "Não consegui carregar: " + esc(e.message));
+    }
+  }
+
   /* -------------------------------------------------------------- cartão */
 
   /** Desenha o cartão do ano numa imagem. É o que sai do app para o mundo:
@@ -586,6 +672,14 @@ const Social = (() => {
   $("rankPeriodo").addEventListener("change", ranking);
   $("rankMetrica").addEventListener("change", ranking);
   $("perfilClose").addEventListener("click", () => $("perfilDlg").close());
+  $("sinoBtn").addEventListener("click", abreNotificacoes);
+  $("notifClose").addEventListener("click", () => $("notifDlg").close());
+
+  /* Voltar para a aba é quando a novidade pode ter chegado — e é de graça,
+     porque quem está com o app fechado não gasta requisição. O intervalo
+     longo cobre quem deixa aberto o dia inteiro. */
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) contaNaoLidas(); });
+  setInterval(() => { if (!document.hidden && Supa.user) contaNaoLidas(); }, 3 * 60 * 1000);
 
   // Delegação: as linhas de leitor nascem e morrem o tempo todo, em três
   // lugares diferentes. Ouvir no documento evita religar ouvinte a cada render.
@@ -655,9 +749,12 @@ const Social = (() => {
     rankingCarregado = false;
     meuPerfil = null;
     comentariosAbertos.clear();
+    naoLidas = 0;
+    pintaSino();                 // sem conta, o sino some junto
     if (!s) return;
     await carregaSeguindo(true);
     repinta();
+    contaNaoLidas();
     // Guardado uma vez: é o que faz o comentário recém-enviado aparecer com
     // nome e rosto, sem recarregar a conversa inteira.
     Supa.myProfile().then(p => { meuPerfil = p; }).catch(() => {});
