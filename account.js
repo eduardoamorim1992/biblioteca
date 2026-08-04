@@ -517,6 +517,7 @@
       $("pUsername").value = perfil.username || "";
       $("pName").value = perfil.display_name || "";
       $("pBio").value = perfil.bio || "";
+      $("pMeta").value = perfil.goal_books || "";
       $("pPrivate").checked = !!perfil.is_private;
       $("accountEmail").textContent = (Supa.user && Supa.user.email) || "";
     }
@@ -563,6 +564,10 @@
   async function carregaPerfil() {
     try {
       perfil = await Supa.myProfile();
+      // Publicado para o app: renderAll() é chamado de dezenas de lugares que
+      // não têm por que conhecer a conta, e o desafio anual sai daqui.
+      window.MEU_PERFIL = perfil;
+      if (typeof renderDesafio === "function") renderDesafio(perfil);
     } catch (e) {
       perfil = null;
       console.warn("perfil não carregou:", e);
@@ -735,13 +740,19 @@
     e.preventDefault();
     aviso("Salvando…");
     try {
+      // Campo vazio é "não participo", não zero: o banco recusa 0 e a
+      // diferença importa — meta zerada e meta ausente são coisas distintas.
+      const meta = parseInt($("pMeta").value, 10);
       perfil = await Supa.updateProfile({
         username: $("pUsername").value.trim().toLowerCase(),
         display_name: $("pName").value.trim(),
         bio: $("pBio").value.trim() || null,
+        goal_books: Number.isFinite(meta) && meta > 0 ? Math.min(meta, 999) : null,
         is_private: $("pPrivate").checked
       });
+      window.MEU_PERFIL = perfil;
       pinta(Supa.session);
+      if (typeof renderDesafio === "function") renderDesafio(perfil);
       aviso("Perfil salvo.", "ok");
     } catch (err) {
       aviso(err.code === "23505" ? "Esse @ já está em uso." : err.message, "erro");

@@ -571,6 +571,20 @@ dialog#livroDlg{width:min(520px,94vw)}
 .pd-texto{flex:1;min-width:0;font-size:14px}
 .pd-texto span{display:block;font-size:12px;color:var(--muted);text-decoration:none}
 
+/* ---------- desafio anual ---------- */
+.desafio-num{display:flex;align-items:baseline;gap:8px;margin-bottom:10px}
+.desafio-num b{font-size:38px;letter-spacing:-.03em;font-variant-numeric:tabular-nums;line-height:1}
+.desafio-num span{font-size:14px;color:var(--text-2)}
+.desafio-barra{height:10px;border-radius:6px;background:var(--surface-2);overflow:hidden}
+.desafio-barra i{
+  display:block;height:100%;border-radius:6px;background:var(--accent);
+  transition:width .5s ease-out;
+}
+.desafio-barra i[data-completo="1"]{background:var(--good)}
+/* No perfil dos outros, a mesma barra em tamanho menor. */
+.perfil-desafio{margin:12px 0}
+.perfil-desafio .rot{display:flex;justify-content:space-between;font-size:12.5px;color:var(--text-2);margin-bottom:5px}
+
 /* ---------- feed ---------- */
 /* Segmentado próprio: o <select> nativo some no meio do cartão e, aqui, a
    escolha entre a própria roda e a praça pública é a coisa mais importante
@@ -859,6 +873,18 @@ dialog#livroDlg{width:min(520px,94vw)}
 
   <!-- ================= PROGRESSO ================= -->
   <section class="section" id="view-progresso">
+
+    <!-- Só aparece para quem escolheu uma meta. -->
+    <div class="card" id="cardDesafio" style="margin-top:16px" hidden>
+      <div class="card-head">
+        <h2>Desafio de <span id="desafioAno"></span></h2>
+        <span class="sub" id="desafioSub"></span>
+      </div>
+      <div class="desafio-num"><b id="desafioLidos">0</b><span id="desafioDe">de 0 livros</span></div>
+      <div class="desafio-barra"><i id="desafioBarra" style="width:0%"></i></div>
+      <p class="dlg-note" id="desafioRitmo" style="margin-top:9px"></p>
+    </div>
+
     <div class="card" style="margin-top:16px">
       <div class="card-head"><h2>Panorama</h2><span class="sub" id="statsRange"></span></div>
       <div class="tiles" id="tiles"></div>
@@ -1089,6 +1115,10 @@ dialog#livroDlg{width:min(520px,94vw)}
         <div class="field">
           <label for="pBio">Bio</label>
           <textarea id="pBio" maxlength="280" style="min-height:60px"></textarea>
+        </div>
+        <div class="field">
+          <label for="pMeta">Desafio do ano <span style="font-weight:400">(livros — deixe vazio para não participar)</span></label>
+          <input type="number" id="pMeta" min="1" max="999" placeholder="ex.: 24">
         </div>
         <label class="check">
           <input type="checkbox" id="pPrivate">
@@ -1416,6 +1446,53 @@ function setStatus(id, status) {
   // Fechar o livro é o instante em que a opinião está mais fresca — e o único
   // em que pedir a nota não é interrupção. Depois disso, só se a pessoa pedir.
   if (status === "lido" && !eraLido && !b.rating) abreResenha(id);
+}
+
+/* =======================================================================
+   Desafio anual
+   A meta mora no perfil, no servidor — as metas diárias são régua de
+   trabalho e ficam no navegador, mas desafio só é desafio se alguém puder
+   ver. A contagem é local: os livros concluídos deste ano estão aqui, e
+   esperar o servidor para desenhar uma barra seria trocar resposta imediata
+   por uma ida à rede.
+   ======================================================================= */
+function livrosLidosNoAno(ano = new Date().getFullYear()) {
+  return state.books.filter(b =>
+    b.status === "lido" && b.finishedAt && +b.finishedAt.slice(0, 4) === ano).length;
+}
+
+/* Sem argumento, usa o último perfil carregado: renderAll() é chamado de
+   dezenas de lugares que não têm motivo para conhecer a conta. */
+function renderDesafio(perfil = window.MEU_PERFIL) {
+  const card = document.getElementById("cardDesafio");
+  if (!card) return;
+  const meta = perfil && perfil.goal_books;
+  if (!meta) { card.hidden = true; return; }
+
+  const ano = new Date().getFullYear();
+  const lidos = livrosLidosNoAno(ano);
+  const pct = Math.min(100, Math.round(lidos / meta * 100));
+  const completo = lidos >= meta;
+
+  card.hidden = false;
+  document.getElementById("desafioAno").textContent = ano;
+  document.getElementById("desafioLidos").textContent = lidos;
+  document.getElementById("desafioDe").textContent = `de ${meta} livro${meta === 1 ? "" : "s"}`;
+  document.getElementById("desafioSub").textContent = completo ? "meta batida" : pct + "%";
+  const barra = document.getElementById("desafioBarra");
+  barra.style.width = pct + "%";
+  barra.dataset.completo = completo ? "1" : "0";
+
+  // Quanto falta, medido contra o tempo que sobra do ano — "faltam 8" sem
+  // dizer "em 2 meses" não informa se está indo bem ou mal.
+  const fim = new Date(ano, 11, 31);
+  const diasRestantes = Math.max(1, Math.ceil((fim - new Date()) / 86400000));
+  const faltam = meta - lidos;
+  document.getElementById("desafioRitmo").textContent = completo
+    ? `Você bateu a meta do ano${lidos > meta ? ` e passou dela em ${lidos - meta}` : ""}. `
+      + "Dá para aumentar no seu perfil."
+    : `Faltam ${faltam} livro${faltam === 1 ? "" : "s"} em ${diasRestantes} dia${diasRestantes === 1 ? "" : "s"}`
+      + ` — cerca de um a cada ${Math.max(1, Math.round(diasRestantes / faltam))} dias.`;
 }
 
 /* =======================================================================
@@ -2206,14 +2283,14 @@ function renderNotes() {
 /* =======================================================================
    Render geral + utilidades de UI
    ======================================================================= */
-function renderAll() { renderToday(); renderShelf(); renderStats(); renderNotes(); paintTimer(); renderPrimeiroDia(); }
+function renderAll() { renderToday(); renderShelf(); renderStats(); renderNotes(); paintTimer(); renderPrimeiroDia(); renderDesafio(); }
 
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 /* Versão visível na tela de entrada. Sem isso não há como saber, à distância,
    se o navegador está rodando o código publicado ou uma sobra de cache. */
-const APP_VERSION = "v22";
+const APP_VERSION = "v23";
 document.getElementById("authVersao").textContent = APP_VERSION;
 
 /* Nada de falhar calado. Um erro não tratado costuma virar "cliquei e não

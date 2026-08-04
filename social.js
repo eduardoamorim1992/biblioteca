@@ -202,6 +202,7 @@ const Social = (() => {
         ${botaoSeguir(p.user_id)}
       </div>
       ${p.bio ? `<p class="perfil-bio">${esc(p.bio)}</p>` : ""}
+      ${barraDesafio(p)}
       <div class="perfil-nums">
         <div class="perfil-num"><b>${p.pages_year}</b><span>páginas no ano</span></div>
         <div class="perfil-num"><b>${p.books_year}</b><span>livros no ano</span></div>
@@ -213,6 +214,24 @@ const Social = (() => {
            <button class="btn primary" id="btnCartao" style="width:100%">Compartilhar meu cartão</button>
            <p class="dlg-note" style="margin-top:8px">Gera uma imagem com seus números do ano e seu @.</p>`
         : ""}`;
+  }
+
+  /** Desafio anual no perfil de quem se visita. Sem meta, nada aparece: o app
+      não inventa desafio para ninguém, e barra vazia sugeriria fracasso onde
+      só houve escolha de não participar. */
+  function barraDesafio(p) {
+    if (!p.goal_books) return "";
+    const lidos = Number(p.books_year) || 0;
+    const pct = Math.min(100, Math.round(lidos / p.goal_books * 100));
+    const completo = lidos >= p.goal_books;
+    return `
+      <div class="perfil-desafio">
+        <div class="rot">
+          <span>Desafio de ${new Date().getFullYear()}</span>
+          <span><b>${lidos}</b> de ${p.goal_books}${completo ? " · batida" : ""}</span>
+        </div>
+        <div class="desafio-barra"><i style="width:${pct}%" data-completo="${completo ? 1 : 0}"></i></div>
+      </div>`;
   }
 
   /* ------------------------------------------------- quem lê o mesmo livro */
