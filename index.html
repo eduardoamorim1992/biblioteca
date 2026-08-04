@@ -28,6 +28,10 @@
   --heat-0:#eceae4; --heat-1:#cde2fb; --heat-2:#9ec5f4; --heat-3:#5598e7; --heat-4:#2a78d6; --heat-5:#184f95;
   --radius:14px;
   --shadow:0 1px 2px rgba(11,11,11,.04), 0 8px 24px rgba(11,11,11,.05);
+  /* Números grandes em serifada: dá ao app cara de coisa lida, não de painel
+     de controle. Vem do sistema de propósito — buscar fonte em CDN quebraria
+     a promessa de abrir offline por causa de enfeite. */
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
 }
 :root[data-theme="dark"]{
   color-scheme: dark;
@@ -77,29 +81,55 @@ header{
   max-width:1080px;margin:0 auto;display:flex;align-items:center;gap:14px;flex-wrap:wrap;
   padding:calc(14px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right)) 14px calc(20px + env(safe-area-inset-left));
 }
-.brand{display:flex;align-items:center;gap:10px;font-weight:680;font-size:16px;letter-spacing:-.02em}
-.brand .dot{width:10px;height:10px;border-radius:3px;background:var(--accent)}
+.brand{display:flex;align-items:center;gap:10px;font-weight:620;font-size:15.5px;letter-spacing:-.02em}
+.brand .mark{
+  width:28px;height:28px;border-radius:9px;background:var(--accent);color:#fff;flex:none;
+  display:flex;align-items:center;justify-content:center;
+  font-size:15px;font-weight:600;letter-spacing:-.06em;
+}
 .head-spacer{flex:1}
 .streak-pill{
-  display:flex;align-items:center;gap:7px;padding:6px 12px;border-radius:999px;
-  background:var(--surface);border:1px solid var(--border);font-size:13px;color:var(--text-2);
+  display:flex;align-items:center;gap:7px;padding:5px 12px;border-radius:999px;
+  background:var(--surface);border:1px solid var(--border);font-size:12.5px;color:var(--text-2);
 }
-.streak-pill b{color:var(--text);font-weight:650}
+.streak-pill b{color:var(--text);font-weight:620;font-variant-numeric:tabular-nums}
+/* No celular ela empurra o cabeçalho para uma segunda linha e repete, palavra
+   por palavra, o que o anel de Hoje mostra logo abaixo. Cabeçalho grudado no
+   topo custa tela em todas as abas; a informação, aqui, não custa nada. */
+@media(max-width:520px){.streak-pill{display:none}}
 
-nav.tabs{display:flex;gap:4px;overflow-x:auto;padding:0 20px;max-width:1080px;margin:0 auto;scrollbar-width:none}
+/* Estado da sincronia onde ele serve de sossego, não de diagnóstico: à vista,
+   sem precisar abrir painel nenhum. */
+.sync-pill{
+  display:flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;
+  background:var(--surface);border:1px solid var(--border);
+  font-size:12.5px;color:var(--text-2);white-space:nowrap;
+}
+.sync-pill .led{width:6px;height:6px;border-radius:50%;background:var(--good);flex:none}
+.sync-pill[data-estado="indo"] .led{background:var(--accent);animation:pulse 1.6s ease-in-out infinite}
+.sync-pill[data-estado="offline"]{color:var(--text-2)}
+.sync-pill[data-estado="offline"] .led,.sync-pill[data-estado="erro"] .led{background:var(--warning)}
+@media(max-width:620px){.sync-pill{display:none}}
+
+nav.tabs{display:flex;gap:2px;overflow-x:auto;padding:0 16px 8px;max-width:1080px;margin:0 auto;scrollbar-width:none}
 nav.tabs::-webkit-scrollbar{display:none}
 .tab{
-  appearance:none;background:none;border:0;border-bottom:2px solid transparent;
-  padding:11px 12px;cursor:pointer;color:var(--text-2);font-size:14px;font-weight:550;white-space:nowrap;
+  appearance:none;background:none;border:0;border-radius:9px;
+  padding:7px 12px;cursor:pointer;color:var(--text-2);font-size:13.5px;font-weight:550;white-space:nowrap;
+  transition:background .12s,color .12s;
 }
-.tab:hover{color:var(--text)}
-.tab[aria-selected="true"]{color:var(--text);border-bottom-color:var(--accent)}
+.tab:hover{color:var(--text);background:var(--surface-2)}
+.tab[aria-selected="true"]{color:var(--accent);background:var(--accent-soft)}
+.tab:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 
 /* ---------- primitives ---------- */
 .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow)}
 .card + .card{margin-top:16px}
 .card-head{display:flex;align-items:baseline;gap:10px;margin-bottom:14px;flex-wrap:wrap}
 .card-head .sub{font-size:12.5px;color:var(--muted)}
+/* Rótulo de seção em versalete: separa "o que é este bloco" de "o que ele
+   diz", sem precisar de mais peso nem de mais tamanho. */
+.card-head h2{font-size:13.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-2)}
 .grid{display:grid;gap:16px}
 .g2{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
 .g3{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
@@ -149,20 +179,24 @@ textarea{resize:vertical;min-height:74px;line-height:1.55}
 .ring .val{
   position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;
 }
-.ring .val .n{font-size:34px;font-weight:680;letter-spacing:-.03em;line-height:1}
-.ring .val .l{font-size:11.5px;color:var(--muted);margin-top:3px}
+.ring .val .n{font-family:var(--serif);font-size:38px;font-weight:400;letter-spacing:-.02em;line-height:1;font-variant-numeric:tabular-nums}
+.ring .val .l{font-size:11.5px;color:var(--muted);margin-top:5px}
 .today-meta{display:flex;flex-direction:column;gap:10px;min-width:0}
-.today-meta .big{font-size:19px;font-weight:620;letter-spacing:-.02em}
-.mini-stats{display:flex;gap:20px;flex-wrap:wrap}
-.mini-stats div{display:flex;flex-direction:column}
-.mini-stats .n{font-size:19px;font-weight:640;letter-spacing:-.02em}
-.mini-stats .l{font-size:11.5px;color:var(--muted)}
+.today-meta .big{font-family:var(--serif);font-size:23px;font-weight:400;letter-spacing:-.01em;line-height:1.25}
+.mini-stats{display:flex;gap:14px;flex-wrap:wrap}
+.mini-stats div{
+  display:flex;flex-direction:column;gap:2px;min-width:96px;
+  padding:9px 12px;border:1px solid var(--border);border-radius:11px;background:var(--bg);
+}
+:root[data-theme="dark"] .mini-stats div{background:var(--surface-2)}
+.mini-stats .n{font-family:var(--serif);font-size:21px;font-weight:400;letter-spacing:-.01em;font-variant-numeric:tabular-nums;line-height:1.1}
+.mini-stats .l{font-size:11px;color:var(--muted)}
 
 /* ---------- cronômetro ---------- */
 .timer{display:flex;gap:22px;align-items:center;flex-wrap:wrap}
 .clock{
-  font-size:46px;font-weight:660;letter-spacing:-.03em;line-height:1;
-  font-variant-numeric:tabular-nums;min-width:158px;
+  font-family:var(--serif);font-size:54px;font-weight:400;letter-spacing:-.02em;line-height:1;
+  font-variant-numeric:tabular-nums;min-width:172px;
 }
 .clock.on{color:var(--accent)}
 .clock .unit{font-size:15px;font-weight:550;color:var(--muted);letter-spacing:0;margin-left:3px}
@@ -178,14 +212,18 @@ textarea{resize:vertical;min-height:74px;line-height:1.55}
 @media(prefers-reduced-motion:reduce){.pulse{animation:none}}
 
 /* ---------- book cards ---------- */
-.books{display:grid;gap:12px}
+.books{display:grid;gap:10px}
 .book{
   display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:start;
   padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--surface);
+  transition:border-color .12s,background .12s;
 }
+.book:hover{border-color:color-mix(in srgb,var(--text) 18%,transparent);background:var(--bg)}
+:root[data-theme="dark"] .book:hover{background:var(--surface-2)}
 .thumb{
   width:46px;height:68px;border-radius:5px;overflow:hidden;flex:none;
-  display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,.18);
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 1px 3px rgba(0,0,0,.18);outline:1px solid var(--border);outline-offset:-1px;
 }
 .thumb img{width:100%;height:100%;object-fit:cover;display:block}
 .thumb span{color:#fff;font-weight:750;font-size:20px;opacity:.92}
@@ -226,11 +264,16 @@ textarea{resize:vertical;min-height:74px;line-height:1.55}
 .book-foot b{color:var(--text-2);font-weight:600}
 
 /* ---------- lists ---------- */
-.list{display:flex;flex-direction:column;gap:2px}
+.list{display:flex;flex-direction:column}
 .item{
-  display:flex;gap:12px;align-items:center;padding:10px 12px;border-radius:10px;
+  display:flex;gap:12px;align-items:center;padding:11px 12px;border-radius:10px;
+  transition:background .12s;
 }
-.item:hover{background:var(--surface-2)}
+/* Filete entre linhas em vez de respiro: a lista fica lida como uma coluna
+   só, e não como cartões soltos que competem com os de verdade. */
+.item + .item{box-shadow:0 -1px 0 var(--border)}
+.item:hover{background:var(--surface-2);box-shadow:none}
+.item:hover + .item{box-shadow:none}
 .item .grow{flex:1;min-width:0}
 .item .ttl{font-size:14px;font-weight:560;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .item .sub{font-size:12px;color:var(--muted)}
@@ -244,9 +287,10 @@ textarea{resize:vertical;min-height:74px;line-height:1.55}
 
 /* ---------- stats ---------- */
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
-.tile{padding:15px;border:1px solid var(--border);border-radius:12px;background:var(--surface)}
-.tile .n{font-size:27px;font-weight:660;letter-spacing:-.03em;line-height:1.15}
-.tile .l{font-size:12px;color:var(--muted);margin-top:4px}
+.tile{padding:15px;border:1px solid var(--border);border-radius:12px;background:var(--surface);transition:border-color .12s}
+.tile:hover{border-color:color-mix(in srgb,var(--text) 18%,transparent)}
+.tile .n{font-family:var(--serif);font-size:31px;font-weight:400;letter-spacing:-.02em;line-height:1.1;font-variant-numeric:tabular-nums}
+.tile .l{font-size:11.5px;color:var(--muted);margin-top:5px;letter-spacing:.03em;text-transform:uppercase;font-weight:550}
 .tile .d{font-size:11.5px;color:var(--text-2);margin-top:6px}
 
 .chart-wrap{position:relative}
@@ -440,8 +484,9 @@ dialog#authDlg::backdrop,dialog#perfilDlg::backdrop{background:rgba(0,0,0,.45);b
 
 <header>
   <div class="head-in">
-    <div class="brand"><span class="dot"></span> Biblioteca</div>
+    <div class="brand"><span class="mark">B</span> Biblioteca</div>
     <div class="head-spacer"></div>
+    <div class="sync-pill" id="headSync" hidden></div>
     <div class="streak-pill" id="headStreak"></div>
     <button class="btn sm" id="accountBtn">Entrar</button>
     <button class="icon-btn" id="themeBtn" title="Alternar tema" aria-label="Alternar tema">◐</button>

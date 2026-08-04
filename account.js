@@ -335,6 +335,8 @@
 
   function pinta_sync(estado) {
     situacao.estado = estado;
+    pinta_pilula(estado);
+
     const el = $("syncStatus");
     // Contar pendências percorre a estante inteira; fora do painel aberto,
     // ninguém está olhando, e isso rodaria a cada tecla registrada.
@@ -349,6 +351,27 @@
       : n ? `${n} alteraç${n === 1 ? "ão" : "ões"} para enviar.`
       : quando ? `Tudo salvo na conta (${quando}).`
       : "Automática: tudo que você registra sobe sozinho.";
+  }
+
+  /* A pílula do cabeçalho fica visível o tempo todo, então precisa ser barata:
+     só estado e horário, nunca contagem — contar percorre a estante inteira, e
+     isto é repintado a cada registro. O número exato mora no painel. */
+  function pinta_pilula(estado) {
+    const p = $("headSync");
+    if (!p) return;
+    if (!Supa.user) { p.hidden = true; return; }
+    const quando = meta.lastSync ? new Date(meta.lastSync).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : null;
+    p.hidden = false;
+    p.dataset.estado = estado;
+    p.innerHTML = `<span class="led"></span>` + (
+      estado === "indo" ? "salvando…"
+      : estado === "offline" ? "sem conexão"
+      : estado === "erro" ? "não salvou"
+      : quando ? `salvo ${quando}` : "salva sozinho"
+    );
+    p.title = estado === "erro" ? "Falhou: " + situacao.erro
+            : estado === "offline" ? "As alterações estão guardadas aqui e sobem quando a conexão voltar."
+            : "Sua estante está salva na conta.";
   }
 
   /* Some mudanças vêm em rajada (registrar leitura mexe em livro e sessão).
@@ -520,6 +543,7 @@
       comecaSincronia();
     }
     pinta(s);
+    pinta_pilula(situacao.estado);   // sem conta, a pílula some junto
   });
 
   // Fora da conta abre a tela de entrada; dentro, o painel da conta.
