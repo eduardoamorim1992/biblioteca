@@ -235,6 +235,247 @@ const Social = (() => {
     if (!dlg.open) dlg.showModal();
   }
 
+  /* ---------------------------------------------------------------- feed
+     O banco registra quem começou e quem terminou um livro desde o primeiro
+     dia. Sem esta tela, seguir alguém não levava a lugar nenhum: você seguia,
+     e nada acontecia. Um app onde seguir não significa nada não é uma rede —
+     é uma lista de nomes. */
+
+  let feedEscopo = "seguindo";
+  let feedFim = false;          // já chegou ao fim da lista?
+  let feedCarregando = false;
+  let feedUltima = null;        // data do último fato, para paginar
+  const comentariosAbertos = new Set();
+
+  /** "agora", "há 3 h", "ontem", "12 de mar". Data cheia num feed é ruído:
+      o que importa é se foi hoje ou faz tempo. */
+  function quando(iso) {
+    const t = Date.parse(iso);
+    if (!t) return "";
+    const min = Math.round((Date.now() - t) / 60000);
+    if (min < 2) return "agora";
+    if (min < 60) return `há ${min} min`;
+    const h = Math.round(min / 60);
+    if (h < 24) return `há ${h} h`;
+    const d = Math.round(h / 24);
+    if (d === 1) return "ontem";
+    if (d < 7) return `há ${d} dias`;
+    return new Date(t).toLocaleDateString("pt-BR", { day: "numeric", month: "short" });
+  }
+
+  const VERBO = {
+    started:  f => `começou a ler <b>${esc(f.book_title || tituloDoPayload(f))}</b>`,
+    finished: f => `terminou <b>${esc(f.book_title || tituloDoPayload(f))}</b>`,
+    note:     f => f.note_kind === "quote"
+                     ? `guardou uma citação${f.book_title ? ` de <b>${esc(f.book_title)}</b>` : ""}`
+                     : `anotou algo${f.book_title ? ` sobre <b>${esc(f.book_title)}</b>` : ""}`,
+    progress: f => `avançou em <b>${esc(f.book_title || tituloDoPayload(f))}</b>`
+  };
+
+  // O livro pode ter sido apagado depois; o título viajou junto na atividade
+  // justamente para o fato não virar "terminou de ler (nada)".
+  const tituloDoPayload = f => (f.payload && f.payload.title) || "um livro";
+
+  function capa(f) {
+    if (f.book_cover) return `<div class="thumb"><img src="${esc(f.book_cover)}" alt="" loading="lazy" onerror="this.remove()"></div>`;
+    const t = (f.book_title || tituloDoPayload(f)).trim().charAt(0);
+    return `<div class="thumb" style="background:var(--accent)"><span>${esc(t)}</span></div>`;
+  }
+
+  function fato(f) {
+    const autor = { id: f.owner, username: f.username, display_name: f.display_name, avatar_url: f.avatar_url };
+    const temLivro = f.kind !== "note" && (f.book_title || f.payload);
+    const abertos = comentariosAbertos.has(f.id);
+    return `
+    <article class="fato" data-fato="${f.id}">
+      <div class="fato-topo">
+        ${avatar(autor)}
+        <div class="fato-quem">
+          <b data-perfil="${esc(f.username)}">${esc(f.display_name || f.username)}</b>
+          <span class="fato-quando">@${esc(f.username)} · ${quando(f.created_at)}</span>
+        </div>
+        ${botaoSeguir(f.owner)}
+      </div>
+
+      <p class="fato-verbo">${(VERBO[f.kind] || (() => "fez algo"))(f)}</p>
+
+      ${temLivro ? `
+        <div class="fato-livro">
+          ${capa(f)}
+          <div style="min-width:0">
+            <div class="t">${esc(f.book_title || tituloDoPayload(f))}</div>
+            <div class="a">${esc(f.book_author || (f.payload && f.payload.author) || "")}${
+              f.book_pages ? ` · ${f.book_pages} págs` : ""}</div>
+          </div>
+        </div>` : ""}
+
+      ${f.note_body ? `
+        <div class="fato-citacao ${f.note_kind === "quote" ? "quote" : ""}">${esc(f.note_body)}${
+          f.note_page ? `<span class="fato-quando"> — pág. ${f.note_page}</span>` : ""}</div>` : ""}
+
+      <div class="fato-acoes">
+        <button class="acao" data-curtir="${f.id}" data-ativo="${f.eu_curti ? 1 : 0}"
+                aria-label="Curtir">${f.eu_curti ? "♥" : "♡"} <span class="n">${f.curtidas || ""}</span></button>
+        <button class="acao" data-coments="${f.id}">💬 <span class="n">${f.comentarios || ""}</span></button>
+        ${Supa.user && f.owner === Supa.user.id ? "" :
+          `<button class="acao" data-denunciar="${f.id}" title="Denunciar">⚑</button>`}
+      </div>
+
+      <div class="coments" data-lista="${f.id}" ${abertos ? "" : "hidden"}></div>
+    </article>`;
+  }
+
+  async function carregaFeed({ mais = false } = {}) {
+    const alvo = $("feedLista");
+    if (!Supa.user) { alvo.innerHTML = vazio("Entre na sua conta para ver o feed."); return; }
+    if (feedCarregando) return;
+    feedCarregando = true;
+    if (!mais) { feedFim = false; feedUltima = null; alvo.innerHTML = vazio("Carregando…"); }
+
+    try {
+      const linhas = await Supa.feed(feedEscopo, 20, mais ? feedUltima : null);
+      if (!mais) alvo.innerHTML = "";
+      if (linhas.length) {
+        feedUltima = linhas[linhas.length - 1].created_at;
+        alvo.insertAdjacentHTML("beforeend", `<div class="feed">${linhas.map(fato).join("")}</div>`);
+        // Um feed com vários blocos vira várias listas; junta tudo numa só.
+        const blocos = alvo.querySelectorAll(".feed");
+        if (blocos.length > 1) {
+          const primeiro = blocos[0];
+          for (let i = 1; i < blocos.length; i++) { primeiro.append(...blocos[i].children); blocos[i].remove(); }
+        }
+      }
+      feedFim = linhas.length < 20;
+      $("feedMais").hidden = feedFim || !alvo.querySelector(".fato");
+
+      if (!alvo.querySelector(".fato")) {
+        alvo.innerHTML = feedEscopo === "seguindo"
+          ? vazio("Você ainda não segue ninguém — ou quem você segue não registrou nada. " +
+                  "Toque em <b>Todos</b> aqui em cima para ver a praça inteira.")
+          : vazio("Ninguém publicou nada ainda. Termine um livro e o seu será o primeiro.");
+      }
+      repinta();
+    } catch (e) {
+      // PGRST202 = função não existe: o SQL do feed ainda não foi aplicado no
+      // banco. Dizer isso é mais útil do que "erro 404".
+      alvo.innerHTML = vazio(/PGRST202|Could not find the function/i.test(e.message || "")
+        ? "O feed ainda não foi ligado neste banco. Rode <b>supabase/feed.sql</b> no SQL Editor do Supabase."
+        : "Não consegui carregar o feed: " + esc(e.message));
+      $("feedMais").hidden = true;
+    } finally { feedCarregando = false; }
+  }
+
+  /** Curtir é a interação mais barata que existe, então ela não pode esperar
+      o servidor: pinta na hora e desfaz se o servidor recusar. */
+  async function alternaCurtida(id, botao) {
+    const curtido = botao.dataset.ativo === "1";
+    const n = botao.querySelector(".n");
+    const antes = +n.textContent || 0;
+    const pinta = (ativo, valor) => {
+      botao.dataset.ativo = ativo ? "1" : "0";
+      botao.firstChild.textContent = ativo ? "♥ " : "♡ ";
+      n.textContent = valor || "";
+    };
+    pinta(!curtido, curtido ? antes - 1 : antes + 1);
+    try {
+      if (curtido) await Supa.descurtir(id); else await Supa.curtir(id);
+    } catch (e) {
+      if (e.code === "23505") return;            // já estava curtido: estado certo
+      pinta(curtido, antes);
+      toast("Não consegui: " + e.message);
+    }
+  }
+
+  async function alternaComentarios(id) {
+    const caixa = document.querySelector(`[data-lista="${id}"]`);
+    if (!caixa) return;
+    if (comentariosAbertos.has(id)) {
+      comentariosAbertos.delete(id);
+      caixa.hidden = true;
+      return;
+    }
+    comentariosAbertos.add(id);
+    caixa.hidden = false;
+    caixa.innerHTML = `<p class="dlg-note">Carregando…</p>`;
+    try {
+      const linhas = await Supa.comentarios(id);
+      caixa.innerHTML = linhas.map(c => comentario(c)).join("") + formularioComentario(id);
+    } catch (e) {
+      caixa.innerHTML = `<p class="dlg-note">Não consegui carregar: ${esc(e.message)}</p>` + formularioComentario(id);
+    }
+  }
+
+  function comentario(c) {
+    const p = c.profiles || {};
+    const meu = Supa.user && c.author === Supa.user.id;
+    return `
+    <div class="coment" data-coment="${c.id}">
+      ${avatar(p)}
+      <div class="coment-corpo">
+        <span class="quem" data-perfil="${esc(p.username || "")}">${esc(p.display_name || p.username || "alguém")}</span>
+        <span class="quando">${quando(c.created_at)}</span>
+        <div class="txt">${esc(c.body)}</div>
+        <div class="coment-acoes">
+          ${meu ? `<button data-apagar-coment="${c.id}">apagar</button>`
+                : `<button data-denunciar-coment="${c.id}">denunciar</button>`}
+        </div>
+      </div>
+    </div>`;
+  }
+
+  const formularioComentario = id => `
+    <form class="coment-form" data-comentar="${id}">
+      <textarea placeholder="Responder…" maxlength="1000" required></textarea>
+      <button class="btn sm primary" type="submit">Enviar</button>
+    </form>`;
+
+  async function enviaComentario(form) {
+    const id = form.dataset.comentar;
+    const campo = form.querySelector("textarea");
+    const texto = campo.value.trim();
+    if (!texto) return;
+    const botao = form.querySelector("button");
+    botao.disabled = true;
+    try {
+      const [novo] = await Supa.comentar(id, texto);
+      campo.value = "";
+      form.insertAdjacentHTML("beforebegin", comentario({
+        ...novo,
+        profiles: { username: (perfilLocal() || {}).username, display_name: (perfilLocal() || {}).display_name, avatar_url: (perfilLocal() || {}).avatar_url }
+      }));
+      const contador = document.querySelector(`[data-coments="${id}"] .n`);
+      if (contador) contador.textContent = (+contador.textContent || 0) + 1;
+    } catch (e) {
+      toast("Não consegui comentar: " + e.message);
+    } finally { botao.disabled = false; }
+  }
+
+  // O perfil de quem está logado, para o comentário recém-enviado aparecer com
+  // nome e avatar sem precisar recarregar a lista inteira.
+  let meuPerfil = null;
+  const perfilLocal = () => meuPerfil;
+
+  async function apagaComentario(id) {
+    if (!confirm("Apagar seu comentário?")) return;
+    try {
+      await Supa.apagarComentario(id);
+      const el = document.querySelector(`[data-coment="${id}"]`);
+      const fatoEl = el && el.closest(".fato");
+      el && el.remove();
+      const contador = fatoEl && fatoEl.querySelector("[data-coments] .n");
+      if (contador) contador.textContent = Math.max(0, (+contador.textContent || 1) - 1) || "";
+    } catch (e) { toast("Não consegui apagar: " + e.message); }
+  }
+
+  async function denuncia({ comentario = null, atividade = null }) {
+    const motivo = prompt("O que há de errado aqui? (isso vai para quem modera)");
+    if (!motivo || !motivo.trim()) return;
+    try {
+      await Supa.denunciar({ comentario, atividade, motivo: motivo.trim().slice(0, 500) });
+      toast("Denúncia enviada. Obrigado por avisar.");
+    } catch (e) { toast("Não consegui enviar: " + e.message); }
+  }
+
   /* -------------------------------------------------------------- cartão */
 
   /** Desenha o cartão do ano numa imagem. É o que sai do app para o mundo:
@@ -337,17 +578,60 @@ const Social = (() => {
   document.addEventListener("click", e => {
     const seguir = e.target.closest("[data-seguir]");
     if (seguir) return alternaSeguir(seguir.dataset.seguir, seguir);
+
+    const curtir = e.target.closest("[data-curtir]");
+    if (curtir) return alternaCurtida(curtir.dataset.curtir, curtir);
+
+    const coments = e.target.closest("[data-coments]");
+    if (coments) return alternaComentarios(coments.dataset.coments);
+
+    const apagar = e.target.closest("[data-apagar-coment]");
+    if (apagar) return apagaComentario(apagar.dataset.apagarComent);
+
+    const denCom = e.target.closest("[data-denunciar-coment]");
+    if (denCom) return denuncia({ comentario: denCom.dataset.denunciarComent });
+
+    const denAtv = e.target.closest("[data-denunciar]");
+    if (denAtv) return denuncia({ atividade: denAtv.dataset.denunciar });
+
+    const escopo = e.target.closest("[data-escopo]");
+    if (escopo) {
+      feedEscopo = escopo.dataset.escopo;
+      document.querySelectorAll("#feedEscopo .seg-b").forEach(b => {
+        const on = b === escopo;
+        b.classList.toggle("on", on);
+        b.setAttribute("aria-selected", String(on));
+      });
+      comentariosAbertos.clear();
+      return carregaFeed();
+    }
+
+    if (e.target.closest("#feedMais")) return carregaFeed({ mais: true });
+
+    // Perfil por último: o nome do autor também é clicável dentro do fato, e
+    // as ações acima estão aninhadas nele.
     const perfil = e.target.closest("[data-perfil]");
-    if (perfil) return abrePerfil(perfil.dataset.perfil);
+    if (perfil && perfil.dataset.perfil) return abrePerfil(perfil.dataset.perfil);
     if (e.target.closest("#btnCartao")) return cartao();
+  });
+
+  document.addEventListener("submit", e => {
+    const form = e.target.closest("[data-comentar]");
+    if (!form) return;
+    e.preventDefault();
+    enviaComentario(form);
   });
 
   // A aba Leitores só busca quando é aberta: ranking de quem nunca clicou ali
   // é requisição jogada fora.
   let rankingCarregado = false;
+  let feedVisto = 0;
   document.querySelector('.tab[data-view="leitores"]').addEventListener("click", async () => {
     await carregaSeguindo();
     if (!rankingCarregado) { rankingCarregado = true; ranking(); }
+    // Feed velho é pior do que feed vazio: quem volta à aba espera novidade.
+    // Um minuto de tolerância evita repetir o pedido em cliques seguidos.
+    if (Date.now() - feedVisto > 60000) { feedVisto = Date.now(); carregaFeed(); }
   });
 
   /* Entrou (ou saiu): a lista de quem eu sigo pertence à sessão. */
@@ -355,9 +639,14 @@ const Social = (() => {
     seguindo = new Set();
     prontos = false;
     rankingCarregado = false;
+    meuPerfil = null;
+    comentariosAbertos.clear();
     if (!s) return;
     await carregaSeguindo(true);
     repinta();
+    // Guardado uma vez: é o que faz o comentário recém-enviado aparecer com
+    // nome e rosto, sem recarregar a conversa inteira.
+    Supa.myProfile().then(p => { meuPerfil = p; }).catch(() => {});
     // Link direto para um perfil: ?u=fulano. É assim que alguém de fora chega.
     const u = new URLSearchParams(location.search).get("u");
     if (u) {

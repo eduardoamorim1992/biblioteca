@@ -285,6 +285,83 @@ const Supa = (() => {
       })}&ol_key=in.(${lista})`);
     },
 
+    // ------------------------------------------------------------------ feed
+    /* Uma ida por tela. A função feed() no banco já devolve autor, livro,
+       nota, contagem de curtidas, contagem de comentários e se fui eu que
+       curti — montar isso no cliente custaria cinco requisições por rolagem. */
+    feed(escopo = "seguindo", limit = 30, antes = null) {
+      return auth("/rest/v1/rpc/feed", {
+        method: "POST",
+        body: { p_escopo: escopo, p_limit: limit, p_antes: antes }
+      });
+    },
+
+    curtir(activityId) {
+      return auth("/rest/v1/likes", {
+        method: "POST", body: { activity_id: activityId, user_id: session.user.id }
+      });
+    },
+
+    descurtir(activityId) {
+      return auth(`/rest/v1/likes?${qs({
+        activity_id: "eq." + activityId, user_id: "eq." + session.user.id
+      })}`, { method: "DELETE" });
+    },
+
+    comentarios(activityId) {
+      return auth(`/rest/v1/comments?${qs({
+        select: "id,body,created_at,author,profiles(username,display_name,avatar_url)",
+        activity_id: "eq." + activityId, order: "created_at.asc", limit: 200
+      })}`);
+    },
+
+    comentar(activityId, texto) {
+      return auth("/rest/v1/comments", {
+        method: "POST",
+        body: { activity_id: activityId, author: session.user.id, body: texto },
+        headers: { Prefer: "return=representation" }
+      });
+    },
+
+    apagarComentario(id) {
+      return auth(`/rest/v1/comments?${qs({ id: "eq." + id })}`, { method: "DELETE" });
+    },
+
+    /** Denúncia. Existe desde o primeiro esquema e nunca teve tela: sem ela,
+        moderar depende de alguém avisar por fora — e ninguém avisa. */
+    denunciar({ comentario = null, atividade = null, motivo }) {
+      return auth("/rest/v1/reports", {
+        method: "POST",
+        body: { reporter: session.user.id, comment_id: comentario, activity_id: atividade, reason: motivo }
+      });
+    },
+
+    /** Publica uma anotação: torna a linha pública e anuncia no feed.
+        Duas escritas porque são dois fatos distintos — a nota passa a ser
+        legível, e passou a existir um acontecimento com hora marcada. */
+    async publicarNota(notaId, livroId, titulo) {
+      await auth(`/rest/v1/notes?${qs({ id: "eq." + notaId })}`, {
+        method: "PATCH", body: { is_public: true }
+      });
+      return auth("/rest/v1/activities", {
+        method: "POST",
+        body: {
+          owner: session.user.id, kind: "note", note_id: notaId, book_id: livroId,
+          payload: { title: titulo || null }
+        },
+        headers: { Prefer: "return=representation" }
+      });
+    },
+
+    /** Despublica: some do feed e volta a ser privada. A atividade fica órfã
+        de propósito — apagá-la levaria junto os comentários de quem respondeu,
+        e a função feed() já esconde atividade sem nota pública. */
+    despublicarNota(notaId) {
+      return auth(`/rest/v1/notes?${qs({ id: "eq." + notaId })}`, {
+        method: "PATCH", body: { is_public: false }
+      });
+    },
+
     // --------------------------------------------------------------- ranking
     leaderboard(period = "month", metric = "pages", limit = 50) {
       return raw("/rest/v1/rpc/leaderboard", {
