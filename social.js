@@ -76,6 +76,9 @@ const Social = (() => {
       if (jaSigo) { await Supa.unfollow(id); seguindo.delete(id); }
       else { await Supa.follow(id); seguindo.add(id); }
       repinta();
+      // O guia do primeiro dia tem um passo "siga um leitor"; sem este aviso
+      // ele só marcaria o passo na próxima vez que a tela inteira redesenhasse.
+      if (typeof renderPrimeiroDia === "function") renderPrimeiroDia();
       toast(jaSigo ? "Deixou de seguir." : "Agora você segue este leitor.");
     } catch (e) {
       // 23505 = já existe. Acontece com clique duplo ou com duas abas abertas;
@@ -92,6 +95,35 @@ const Social = (() => {
       b.textContent = jaSigo ? "Seguindo" : "Seguir";
       b.classList.toggle("primary", !jaSigo);
     });
+  }
+
+  /* --------------------------------------------------------- sugestões
+     A busca só acha quem a pessoa já conhece de fora; o ranking exige
+     adivinhar que aquilo é uma lista de gente. Isto é a resposta para
+     "não conheço ninguém aqui", que é o estado de todo mundo no primeiro dia. */
+
+  async function carregaSugestoes() {
+    const card = $("cardSugestoes"), alvo = $("listaSugestoes");
+    if (!Supa.user) { card.hidden = true; return; }
+    let gente;
+    try {
+      gente = await Supa.sugestoes(6);
+    } catch (e) {
+      // Função ainda não aplicada no banco: o cartão simplesmente não aparece.
+      // Um erro aqui não ajuda ninguém — o resto da aba funciona igual.
+      card.hidden = true;
+      console.warn("sugestões:", e.message);
+      return;
+    }
+    if (!gente.length) { card.hidden = true; return; }
+
+    card.hidden = false;
+    alvo.innerHTML = gente.map(s => linhaLeitor(
+      { id: s.user_id, username: s.username, display_name: s.display_name, avatar_url: s.avatar_url },
+      { numero: s.em_comum
+          ? `<span class="chip-status">${s.em_comum} livro${s.em_comum === 1 ? "" : "s"} em comum</span>`
+          : (s.livros ? `<span class="chip-status">${s.livros} livro${s.livros === 1 ? "" : "s"}</span>` : "") }
+    )).join("");
   }
 
   /* -------------------------------------------------------------- busca */
@@ -873,7 +905,7 @@ const Social = (() => {
   let feedVisto = 0;
   document.querySelector('.tab[data-view="leitores"]').addEventListener("click", async () => {
     await carregaSeguindo();
-    if (!rankingCarregado) { rankingCarregado = true; ranking(); }
+    if (!rankingCarregado) { rankingCarregado = true; ranking(); carregaSugestoes(); }
     // Feed velho é pior do que feed vazio: quem volta à aba espera novidade.
     // Um minuto de tolerância evita repetir o pedido em cliques seguidos.
     if (Date.now() - feedVisto > 60000) { feedVisto = Date.now(); carregaFeed(); }
@@ -891,6 +923,8 @@ const Social = (() => {
     if (!s) return;
     await carregaSeguindo(true);
     repinta();
+    // Só agora dá para saber se o passo "siga um leitor" está feito.
+    if (typeof renderPrimeiroDia === "function") renderPrimeiroDia();
     contaNaoLidas();
     // Guardado uma vez: é o que faz o comentário recém-enviado aparecer com
     // nome e rosto, sem recarregar a conversa inteira.
@@ -908,5 +942,6 @@ const Social = (() => {
      sem ele, assume público, que é o padrão do cadastro. */
   const souPrivado = () => !!(meuPerfil && meuPerfil.is_private);
 
-  return { enriquecerEstante, abrePerfil, abreLivro, ranking, souPrivado };
+  return { enriquecerEstante, abrePerfil, abreLivro, ranking, souPrivado,
+           quantosSigo: () => seguindo.size };
 })();

@@ -251,6 +251,14 @@ const Supa = (() => {
       { token: session && session.access_token });
     },
 
+    /** A quem seguir: livros em comum primeiro, tamanho da estante como
+        desempate. Para quem acabou de entrar e não tem livro nenhum, o
+        desempate é o único critério — e seguir quem registra leitura é o que
+        garante que o feed terá o que mostrar amanhã. */
+    sugestoes(limit = 6) {
+      return auth("/rest/v1/rpc/sugestoes", { method: "POST", body: { p_limit: limit } });
+    },
+
     /** Quem eu sigo, em uma ida só — o app guarda e usa para pintar os botões. */
     async following() {
       if (!session || !session.user) return [];

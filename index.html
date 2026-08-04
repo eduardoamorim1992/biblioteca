@@ -558,6 +558,19 @@ dialog#livroDlg{width:min(520px,94vw)}
   background:var(--surface-2);color:var(--text-2);white-space:nowrap;
 }
 
+/* ---------- primeiro dia ---------- */
+.primeiro-dia{border-color:var(--accent)}
+.pd-passos{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+.pd-passo{display:flex;align-items:center;gap:11px;padding:9px 0}
+.pd-marca{
+  flex:none;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;
+  font-size:12px;font-weight:700;border:2px solid var(--border);color:var(--muted);
+}
+.pd-passo[data-feito="1"] .pd-marca{background:var(--good);border-color:var(--good);color:#fff}
+.pd-passo[data-feito="1"] .pd-texto{color:var(--muted);text-decoration:line-through}
+.pd-texto{flex:1;min-width:0;font-size:14px}
+.pd-texto span{display:block;font-size:12px;color:var(--muted);text-decoration:none}
+
 /* ---------- feed ---------- */
 /* Segmentado próprio: o <select> nativo some no meio do cartão e, aqui, a
    escolha entre a própria roda e a praça pública é a coisa mais importante
@@ -663,6 +676,16 @@ dialog#livroDlg{width:min(520px,94vw)}
 
   <!-- ================= HOJE ================= -->
   <section class="section on" id="view-hoje">
+
+    <!-- Some sozinho quando os três passos estão feitos. -->
+    <div class="card primeiro-dia" id="primeiroDia" style="margin-top:16px" hidden>
+      <div class="card-head">
+        <h2>Comece por aqui</h2>
+        <button class="icon-btn" id="pdFechar" aria-label="Dispensar" title="Dispensar">✕</button>
+      </div>
+      <ol class="pd-passos" id="pdPassos"></ol>
+    </div>
+
     <div class="card" style="margin-top:16px">
       <div class="today">
         <div class="ring">
@@ -936,6 +959,15 @@ dialog#livroDlg{width:min(520px,94vw)}
       </div>
       <div id="feedLista"></div>
       <button class="btn" type="button" id="feedMais" style="width:100%;margin-top:12px" hidden>Carregar mais</button>
+    </div>
+
+    <!-- Só aparece enquanto houver quem sugerir. -->
+    <div class="card" id="cardSugestoes" style="margin-top:16px" hidden>
+      <div class="card-head">
+        <h2>Para seguir</h2>
+        <span class="sub">quem lê o que você lê</span>
+      </div>
+      <div id="listaSugestoes"></div>
     </div>
 
     <div class="card" style="margin-top:16px">
@@ -1385,6 +1417,51 @@ function setStatus(id, status) {
   // em que pedir a nota não é interrupção. Depois disso, só se a pessoa pedir.
   if (status === "lido" && !eraLido && !b.rating) abreResenha(id);
 }
+
+/* =======================================================================
+   Primeiro dia
+   Estante vazia, feed vazio e ninguém seguido é o estado em que quase todo
+   mundo desiste. Três passos, e o cartão some sozinho quando terminam —
+   guia que fica para sempre vira móvel velho na sala.
+   ======================================================================= */
+const PD_KEY = "biblioteca.primeirodia.dispensado";
+
+function renderPrimeiroDia() {
+  const card = document.getElementById("primeiroDia");
+  if (!card) return;
+  if (localStorage.getItem(PD_KEY)) { card.hidden = true; return; }
+
+  const sigo = (typeof Social !== "undefined" && Social.quantosSigo) ? Social.quantosSigo() : 0;
+  const passos = [
+    { feito: state.books.length > 0, texto: "Adicione seu primeiro livro",
+      dica: "Busque pelo título e o resto vem preenchido", ir: "estante" },
+    { feito: state.sessions.length > 0, texto: "Registre uma leitura",
+      dica: "Quantas páginas você leu hoje", ir: "hoje" },
+    { feito: sigo > 0, texto: "Siga um leitor",
+      dica: "É o que faz o feed ter o que mostrar amanhã", ir: "leitores" }
+  ];
+
+  // Feito tudo, o cartão não tem mais o que dizer.
+  if (passos.every(p => p.feito)) { card.hidden = true; return; }
+
+  card.hidden = false;
+  document.getElementById("pdPassos").innerHTML = passos.map(p => `
+    <li class="pd-passo" data-feito="${p.feito ? 1 : 0}">
+      <span class="pd-marca">${p.feito ? "✓" : ""}</span>
+      <span class="pd-texto">${p.texto}<span>${p.dica}</span></span>
+      ${p.feito ? "" : `<button class="btn sm" data-pd-ir="${p.ir}">Ir</button>`}
+    </li>`).join("");
+}
+
+document.getElementById("pdFechar").addEventListener("click", () => {
+  localStorage.setItem(PD_KEY, "1");
+  document.getElementById("primeiroDia").hidden = true;
+});
+
+document.getElementById("pdPassos").addEventListener("click", e => {
+  const b = e.target.closest("[data-pd-ir]");
+  if (b) openView(b.dataset.pdIr);
+});
 
 /* =======================================================================
    Resenha
@@ -2129,14 +2206,14 @@ function renderNotes() {
 /* =======================================================================
    Render geral + utilidades de UI
    ======================================================================= */
-function renderAll() { renderToday(); renderShelf(); renderStats(); renderNotes(); paintTimer(); }
+function renderAll() { renderToday(); renderShelf(); renderStats(); renderNotes(); paintTimer(); renderPrimeiroDia(); }
 
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 /* Versão visível na tela de entrada. Sem isso não há como saber, à distância,
    se o navegador está rodando o código publicado ou uma sobra de cache. */
-const APP_VERSION = "v21";
+const APP_VERSION = "v22";
 document.getElementById("authVersao").textContent = APP_VERSION;
 
 /* Nada de falhar calado. Um erro não tratado costuma virar "cliquei e não

@@ -4,7 +4,7 @@
    - estáticos (ícones, manifest): cache primeiro, revalidando por trás
    - Open Library: sempre rede, nunca cache (metadados não são do app) */
 
-const VERSION = "biblioteca-v21";
+const VERSION = "biblioteca-v22";
 const SHELL = [
   "./",
   "./index.html",
