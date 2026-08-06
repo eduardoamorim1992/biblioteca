@@ -23,8 +23,12 @@ Perfil marcado como privado sai do ranking e do feed.
 3. No mesmo lugar, cole o `feed.sql` → **Run**. É o que liga o feed: conserta o
    gatilho que publicava importação como se fosse notícia e cria a função que
    monta a linha do tempo. Sem este passo o app avisa na tela, em vez de quebrar.
-4. Em **Authentication → Providers**, deixe *Email* ligado. Google é opcional.
-5. Em **Project Settings → API**, copie a **Project URL** e a chave **anon public**.
+4. Rode os complementos, **nesta ordem**: `privacidade.sql`, `resenhas.sql`,
+   `notificacoes.sql`, `livro.sql`, `sugestoes.sql`, `desafio.sql` e, por
+   último, `conquistas.sql` — este lê `books.rating` e `profiles.goal_books`,
+   criados nos dois anteriores, e recusa rodar antes deles.
+5. Em **Authentication → Providers**, deixe *Email* ligado. Google é opcional.
+6. Em **Project Settings → API**, copie a **Project URL** e a chave **anon public**.
 
 Para valer com gente de verdade, falta um passo que não é SQL: em
 **Authentication → Emails**, ligar um SMTP próprio (Resend, Brevo, SendGrid). O
@@ -48,9 +52,28 @@ A chave `anon` é feita para ficar no front — ela não dá acesso a nada por s
 Funções:
 
 - `reader_streak(uuid)` — sequência de dias consecutivos, por ilhas de datas
+- `reader_best_streak(uuid)` — a maior sequência já feita, que é a régua das
+  conquistas: feriado não tira medalha de quem já leu 40 dias seguidos
+- `avatar_liberado(uuid, text)` — o dono tem direito a este avatar?
 - `leaderboard(período, métrica, limite)` — ranking por páginas, livros ou sequência; semana, mês, ano ou geral
 - `reader_card(username)` — o cartão do perfil público
 - `feed(escopo, limite, antes)` — a linha do tempo em uma consulta só, já com autor, livro, citação, contagem de curtidas e comentários, e se fui eu que curti
+
+## Por que a conquista é conferida no banco
+
+O avatar conquistado mora em `profiles.avatar_url`, como `av:<id>`. Se só o
+JavaScript checasse a régua, qualquer pessoa liberaria qualquer medalha com um
+`PATCH` — a chave anônima está no navegador de todo mundo, por definição.
+Recompensa que o premiado carimba sozinho é um campo de texto com nome bonito.
+
+`conquistas.sql` põe um gatilho no caminho: quando `avatar_url` muda, ele
+pergunta a `avatar_liberado()` se a conta tem os números, e recusa a linha se
+não tiver. Nenhuma coluna nova, nenhum contador paralelo — a conta sai de
+`sessions`, `books`, `notes` e `follows`, que já eram a verdade.
+
+O catálogo de avatares tem gêmeo em `avatares.js`. Acrescentar um lá sem
+acrescentar aqui faz a troca falhar com mensagem clara, que é o menos ruim dos
+desencontros: um avatar que aparece e some ao recarregar seria pior.
 
 ## Por que o feed não é uma consulta simples
 

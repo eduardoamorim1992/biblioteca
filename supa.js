@@ -280,6 +280,22 @@ const Supa = (() => {
       })}`, { method: "DELETE" });
     },
 
+    /** A estante de um leitor. Nenhuma função nova: o RLS de books já decide
+        quem pode ler o quê — perfil público abre a estante, perfil privado
+        devolve lista vazia mesmo para quem o segue.
+
+        Uma ida só, sem paginar: uma estante de leitor cabe em duzentas linhas
+        e o diálogo mostra tudo de uma vez. Paginar aqui custaria mais código
+        do que trazer o que não vai ser rolado. */
+    estanteDe(userId, limit = 200) {
+      return auth(`/rest/v1/books?${qs({
+        select: "id,title,author,cover_url,pages,current_page,status,rating,year,ol_key",
+        owner: "eq." + userId,
+        order: "created_at.desc",
+        limit
+      })}`);
+    },
+
     /** Leitores públicos que têm estes livros na estante.
         Um pedido para a estante inteira, não um por livro: com 40 livros na
         tela, 40 requisições seriam um jeito elegante de derrubar o próprio app. */

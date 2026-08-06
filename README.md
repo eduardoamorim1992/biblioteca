@@ -18,6 +18,22 @@ O tempo é medido por relógio absoluto e o estado fica salvo: bloquear a tela, 
 
 **Notas** — citações e comentários por livro e página, com busca.
 
+**Leitores** — busca, ranking, feed e perfil. Tocar no nome de alguém abre o
+perfil, e o perfil abre a estante: o que a pessoa está lendo, o que já leu, o
+que quer ler e as notas que deu. É o que faz seguir alguém significar algo —
+antes disso, seguir um leitor levava a três números e ponto.
+
+**Conquistas** — dezesseis avatares desenhados no próprio app, três livres e
+treze abertos por leitura: sequência de dias, horas, páginas, livros
+concluídos, anotações, citações, avaliações, leitores seguidos e o desafio do
+ano batido. Ficam no painel da conta, em *Seu avatar*, com a régua e o quanto
+falta para cada um. O avatar escolhido aparece no feed, no ranking, nos
+comentários e para quem visita seu perfil.
+
+Nenhum deles é imagem hospedada — são SVG de duas linhas, o que mantém a
+promessa de funcionar offline. E quem confere a conquista é o banco, não o
+navegador: `supabase/conquistas.sql` recusa avatar que a conta não ganhou.
+
 ## Onde ficam os dados
 
 Em dois lugares ao mesmo tempo: no `localStorage` do navegador, para o app

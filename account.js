@@ -520,6 +520,11 @@
       $("pMeta").value = perfil.goal_books || "";
       $("pPrivate").checked = !!perfil.is_private;
       $("accountEmail").textContent = (Supa.user && Supa.user.email) || "";
+      // Guardado porque este pinta() roda na registração do onChange, que
+      // acontece enquanto avatares.js ainda não foi carregado. Por typeof, e
+      // não por window: `const` no topo de script clássico não vira
+      // propriedade do window, e a guarda nunca seria verdadeira.
+      if (typeof Avatares !== "undefined") Avatares.pinta(perfil);
     }
   }
 

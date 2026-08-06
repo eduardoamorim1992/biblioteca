@@ -21,8 +21,17 @@ const Social = (() => {
 
   const inicial = p => ((p.display_name || p.username || "?").trim().charAt(0));
 
+  /* Três origens possíveis, nesta ordem: avatar conquistado (desenhado aqui
+     mesmo, sem ir à rede), imagem hospedada, e a inicial do nome.
+
+     O teste de http: existe porque avatar_url guarda `av:coruja` para os
+     conquistados. Sem ele, uma chave de avatar que este navegador não
+     conhece — versão velha em cache, catálogo novo no ar — viraria
+     <img src="av:coruja">, e o rosto sumiria em vez de virar a inicial. */
   function avatar(p) {
-    return p.avatar_url
+    const desenho = typeof Avatares !== "undefined" ? Avatares.svg(p.avatar_url) : "";
+    if (desenho) return `<div class="leitor-av" data-av="1">${desenho}</div>`;
+    return /^https?:/i.test(p.avatar_url || "")
       ? `<div class="leitor-av"><img src="${esc(p.avatar_url)}" alt="" loading="lazy" onerror="this.remove()"></div>`
       : `<div class="leitor-av">${esc(inicial(p))}</div>`;
   }
@@ -170,8 +179,12 @@ const Social = (() => {
 
   /* -------------------------------------------------------------- perfil */
 
+  let ultimoPerfil = 0;
+
   async function abrePerfil(username) {
     const dlg = $("perfilDlg");
+    const meu = ++ultimoPerfil;      // abrir outro perfil no meio anula este
+    estanteVista = null;
     $("perfilTitulo").textContent = "@" + username;
     $("perfilCorpo").innerHTML = vazio("Carregando…");
     if (!dlg.open) dlg.showModal();
@@ -180,9 +193,11 @@ const Social = (() => {
     try {
       p = await Supa.profileByUsername(username);
     } catch (e) {
+      if (meu !== ultimoPerfil) return;
       $("perfilCorpo").innerHTML = vazio("Não consegui abrir este perfil: " + esc(e.message));
       return;
     }
+    if (meu !== ultimoPerfil) return;
     if (!p) {
       // reader_card() não devolve perfil privado — e é isso que o usuário
       // precisa ler, em vez de um erro técnico.
@@ -209,11 +224,109 @@ const Social = (() => {
         <div class="perfil-num"><b>${p.streak}</b><span>dias seguidos</span></div>
       </div>
       <p class="dlg-note">Lendo por aqui desde ${desde.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}.</p>
+      <div id="perfilEstante"></div>
       ${Supa.user && p.user_id === Supa.user.id
         ? `<div class="dlg-sep"></div>
            <button class="btn primary" id="btnCartao" style="width:100%">Compartilhar meu cartão</button>
            <p class="dlg-note" style="margin-top:8px">Gera uma imagem com seus números do ano e seu @.</p>`
         : ""}`;
+
+    carregaEstante(p.user_id, meu);
+  }
+
+  /* ------------------------------------------- a estante de quem se visita
+     Seguir alguém sem poder ver o que a pessoa lê é seguir um número. Esta
+     é a pergunta que o perfil não respondia — e o RLS já a liberava desde o
+     primeiro esquema: `books_read` abre a estante de perfil público. Faltava
+     a tela, não a permissão.
+
+     Vem depois do cartão, em segundo pedido: os números aparecem na hora e a
+     lista chega quando chegar. Numa ida só, o perfil inteiro esperaria pelo
+     que é detalhe. */
+
+  const ROTULO_ESTANTE = { lendo: "Lendo", lido: "Lidos", fila: "Quero ler", abandonado: "Abandonados" };
+  const CHIP_ESTANTE   = { lendo: "lendo", lido: "lido", fila: "quero ler", abandonado: "abandonado" };
+  const ORDEM_ESTANTE  = ["lendo", "lido", "fila", "abandonado"];
+
+  let estanteVista = null;         // { livros, filtro } do perfil aberto agora
+
+  async function carregaEstante(userId, marca) {
+    const alvo = $("perfilEstante");
+    if (!alvo || !userId) return;
+    alvo.innerHTML = `<div class="obra-secao">Estante</div><p class="dlg-note">Carregando…</p>`;
+
+    let livros;
+    try {
+      livros = await Supa.estanteDe(userId);
+    } catch (e) {
+      if (marca !== ultimoPerfil) return;
+      $("perfilEstante").innerHTML =
+        `<div class="obra-secao">Estante</div>
+         <p class="dlg-note">Não consegui carregar a estante: ${esc(e.message)}</p>`;
+      return;
+    }
+    if (marca !== ultimoPerfil) return;      // já é outro perfil na tela
+    estanteVista = { livros, filtro: "todos" };
+    pintaEstante();
+  }
+
+  function livroDaEstante(l, comChip) {
+    const capa = l.cover_url
+      ? `<div class="thumb"><img src="${esc(l.cover_url)}" alt="" loading="lazy" onerror="this.remove()"></div>`
+      : `<div class="thumb"><span>${esc((l.title || "?").trim().charAt(0).toUpperCase())}</span></div>`;
+
+    // Só quem está lendo tem uma porcentagem que diz alguma coisa: em livro na
+    // fila ela é sempre zero, e em livro lido é sempre cem.
+    const andamento = l.status === "lendo" && l.pages
+      ? ` · ${Math.min(100, Math.round((l.current_page || 0) / l.pages * 100))}%` : "";
+    const detalhe = [l.author, l.year].filter(Boolean).join(" · ") || "—";
+    const direita = l.rating ? estrelasFeed(l.rating)
+                  : comChip ? `<span class="chip-status">${CHIP_ESTANTE[l.status] || l.status}</span>`
+                  : "";
+
+    // Sem ol_key não há página da obra para abrir — livro digitado à mão não
+    // tem com o que ser agregado. Melhor linha inerte do que clique morto.
+    return `
+    <button type="button" class="est-livro" data-abre="${l.ol_key ? 1 : 0}"
+            ${l.ol_key ? `data-obra="${esc(l.ol_key)}"` : "disabled"}>
+      ${capa}
+      <div class="est-corpo">
+        <div class="est-t">${esc(l.title)}</div>
+        <div class="est-a">${esc(detalhe)}${andamento}</div>
+      </div>
+      ${direita}
+    </button>`;
+  }
+
+  function pintaEstante() {
+    const alvo = $("perfilEstante");
+    if (!alvo || !estanteVista) return;
+    const { livros, filtro } = estanteVista;
+
+    if (!livros.length) {
+      alvo.innerHTML = `<div class="obra-secao">Estante</div>
+        <div class="empty">Nenhum livro nesta estante ainda.</div>`;
+      return;
+    }
+
+    const conta = s => livros.filter(l => l.status === s).length;
+    const abas = [["todos", `Todos ${livros.length}`]]
+      .concat(ORDEM_ESTANTE.filter(conta).map(s => [s, `${ROTULO_ESTANTE[s]} ${conta(s)}`]));
+
+    const lista = (filtro === "todos" ? livros : livros.filter(l => l.status === filtro))
+      .slice()
+      .sort((a, b) => ORDEM_ESTANTE.indexOf(a.status) - ORDEM_ESTANTE.indexOf(b.status)
+                   || (a.title || "").localeCompare(b.title || "", "pt-BR"));
+
+    alvo.innerHTML = `
+      <div class="obra-secao">Estante</div>
+      <div class="est-cab">
+        <div class="seg">${abas.map(([v, rotulo]) => `
+          <button type="button" class="seg-b${v === filtro ? " on" : ""}"
+                  data-est-filtro="${v}" aria-pressed="${v === filtro}">${esc(rotulo)}</button>`).join("")}
+        </div>
+      </div>
+      <div class="est-lista">${lista.map(l => livroDaEstante(l, filtro === "todos")).join("")}</div>`;
   }
 
   /** Desafio anual no perfil de quem se visita. Sem meta, nada aparece: o app
@@ -883,6 +996,12 @@ const Social = (() => {
 
     const denAtv = e.target.closest("[data-denunciar]");
     if (denAtv) return denuncia({ atividade: denAtv.dataset.denunciar });
+
+    const estFiltro = e.target.closest("[data-est-filtro]");
+    if (estFiltro) {
+      if (estanteVista) { estanteVista.filtro = estFiltro.dataset.estFiltro; pintaEstante(); }
+      return;
+    }
 
     const obra = e.target.closest("[data-obra]");
     if (obra) return abreLivro(obra.dataset.obra);

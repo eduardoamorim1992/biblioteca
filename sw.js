@@ -4,13 +4,14 @@
    - estáticos (ícones, manifest): cache primeiro, revalidando por trás
    - Open Library: sempre rede, nunca cache (metadados não são do app) */
 
-const VERSION = "biblioteca-v23";
+const VERSION = "biblioteca-v24";
 const SHELL = [
   "./",
   "./index.html",
   "./config.js",
   "./supa.js",
   "./account.js",
+  "./avatares.js",
   "./social.js",
   "./manifest.json",
   "./icons/icon-192.png",
