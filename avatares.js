@@ -130,15 +130,39 @@ const Avatares = (() => {
   /* ------------------------------------------------------------- desenho */
 
   /** SVG do avatar, ou "" se a chave não for de avatar deste catálogo —
-      é o que deixa quem chama decidir entre desenho, foto e inicial. */
-  function svg(avatarUrl) {
+      é o que deixa quem chama decidir entre desenho, foto e inicial.
+
+      Com `px`, sai medido e autônomo: dentro da página o tamanho vem do CSS,
+      mas como imagem o SVG precisa de medida própria e do xmlns, senão o
+      navegador não sabe em que escala rasterizar. Todas as cores são hex
+      literal justamente por isso — variável de CSS não atravessa a fronteira
+      da imagem, e o avatar sairia sem cor nenhuma. */
+  function svg(avatarUrl, px) {
     const a = PORID.get(idDaChave(avatarUrl));
     if (!a) return "";
-    return `<svg class="av-svg" viewBox="0 0 40 40" aria-hidden="true">
+    const medida = px ? ` width="${px}" height="${px}"` : "";
+    return `<svg xmlns="http://www.w3.org/2000/svg" class="av-svg" viewBox="0 0 40 40"${medida} aria-hidden="true">
       <circle cx="20" cy="20" r="20" fill="${TOM[a.tom]}"/>
       <g fill="none" stroke="${TRACO}" stroke-width="2"
          stroke-linecap="round" stroke-linejoin="round">${a.glifo}</g>
     </svg>`;
+  }
+
+  /** O avatar como imagem pronta para canvas, ou null se não houver desenho.
+
+      Vai por data URI, não por rede: o cartão tem que sair com o app offline.
+      E data URI de SVG sem referência externa não suja o canvas — o que
+      importa porque canvas sujo faz toBlob() estourar, e aí não é o rosto que
+      some do cartão, é o cartão inteiro. */
+  function paraImagem(avatarUrl, px = 132) {
+    const marcacao = svg(avatarUrl, px);
+    if (!marcacao) return Promise.resolve(null);
+    return new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => resolve(null);     // cartão sem rosto > cartão nenhum
+      img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(marcacao);
+    });
   }
 
   const nomeDe = avatarUrl => (PORID.get(idDaChave(avatarUrl)) || {}).nome || null;
@@ -354,6 +378,6 @@ const Avatares = (() => {
     if (cel) escolhe(cel.dataset.avId);
   });
 
-  return { svg, nomeDe, pinta, confere, numeros, abre,
+  return { svg, paraImagem, nomeDe, pinta, confere, numeros, abre,
            conquistados: () => conquistados(numeros()) };
 })();

@@ -901,20 +901,32 @@ const Social = (() => {
     g.font = fonte(30, 600);
     g.fillText("BIBLIOTECA", 90, 140);
 
+    /* O rosto, acima do nome e na mesma margem de tudo — a borda esquerda é a
+       única coisa que alinha este cartão, e jogar a cara no canto oposto
+       quebraria a espinha dele.
+
+       O avatar é a recompensa, e esta imagem é o único lugar em que ela sai
+       do app. Até aqui o cartão saía com nome, @ e três números, sem cara. */
+    let rosto = null;
+    if (typeof Avatares !== "undefined") {
+      try { rosto = await Avatares.paraImagem(p.avatar_url, 132); } catch (e) { rosto = null; }
+    }
+    desenhaRosto(g, rosto, (p.display_name || p.username || "?").trim().charAt(0), 90, 190, 132, fonte);
+
     g.fillStyle = "#fff";
     g.font = fonte(76, 700);
-    g.fillText(recorta(g, p.display_name || p.username, W - 180, 76, 700), 90, 300);
+    g.fillText(recorta(g, p.display_name || p.username, W - 180, 76, 700), 90, 420);
 
     g.fillStyle = "rgba(255,255,255,.8)";
     g.font = fonte(38, 500);
-    g.fillText("@" + p.username, 90, 362);
+    g.fillText("@" + p.username, 90, 482);
 
     const nums = [
       [p.pages_year, "páginas no ano"],
       [p.books_year, p.books_year === 1 ? "livro no ano" : "livros no ano"],
       [p.streak, p.streak === 1 ? "dia seguido" : "dias seguidos"]
     ];
-    let y = 520;
+    let y = 640;
     for (const [valor, rotulo] of nums) {
       g.fillStyle = "#fff";
       g.font = fonte(118, 700);
@@ -922,7 +934,7 @@ const Social = (() => {
       g.fillStyle = "rgba(255,255,255,.78)";
       g.font = fonte(34, 500);
       g.fillText(rotulo, 92, y + 52);
-      y += 210;
+      y += 200;
     }
 
     g.fillStyle = "rgba(255,255,255,.7)";
@@ -946,6 +958,25 @@ const Social = (() => {
     a.href = url; a.download = arquivo.name; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 5000);
     toast("Cartão salvo nos downloads.");
+  }
+
+  /** Desenha o rosto no cartão. Quem não escolheu avatar ganha a inicial num
+      disco, e não um buraco: um cartão que muda de forma conforme a pessoa
+      tem ou não avatar seriam dois cartões para manter. */
+  function desenhaRosto(g, img, inicial, x, y, d, fonte) {
+    if (img) return g.drawImage(img, x, y, d, d);
+    g.save();
+    g.beginPath();
+    g.arc(x + d / 2, y + d / 2, d / 2, 0, Math.PI * 2);
+    g.fillStyle = "rgba(255,255,255,.16)"; g.fill();
+    g.lineWidth = 2; g.strokeStyle = "rgba(255,255,255,.45)"; g.stroke();
+    g.fillStyle = "#fff";
+    g.font = fonte(62, 600);
+    // O resto do cartão desenha alinhado à esquerda, pela linha de base. Estas
+    // duas trocas valem só aqui dentro — daí o save/restore.
+    g.textAlign = "center"; g.textBaseline = "middle";
+    g.fillText(inicial.toUpperCase(), x + d / 2, y + d / 2 + 3);
+    g.restore();
   }
 
   /** Encolhe o texto até caber, para um nome comprido não vazar da imagem. */
