@@ -167,6 +167,23 @@ const Avatares = (() => {
 
   const nomeDe = avatarUrl => (PORID.get(idDaChave(avatarUrl)) || {}).nome || null;
 
+  /** A fileira de conquistas de alguém, para o perfil de quem se visita.
+      Só o que a pessoa ganhou — quem visita não precisa da lista de tarefas
+      alheia, e mostrar o que falta ao outro é apontar, não informar.
+
+      A ordem sai daqui, não da resposta do servidor: a fileira tem que ficar
+      igual em todos os perfis, senão comparar dois vira caça ao tesouro. */
+  function fila(ids) {
+    const tem = new Set(ids || []);
+    const meus = CATALOGO.filter(a => tem.has(a.id));
+    if (!meus.length) return "";
+    return `
+      <div class="obra-secao">Conquistas · ${meus.length} de ${CATALOGO.length}</div>
+      <div class="conq-fila">${meus.map(a =>
+        `<span class="conq" title="${esc(a.nome + " — " + a.como)}">${svg(chaveDe(a.id))}</span>`
+      ).join("")}</div>`;
+  }
+
   /* -------------------------------------------------------------- régua
      Tudo daqui sai do estado local, não do servidor: o número tem que
      aparecer com o app offline e mudar no mesmo instante em que a pessoa
@@ -378,6 +395,6 @@ const Avatares = (() => {
     if (cel) escolhe(cel.dataset.avId);
   });
 
-  return { svg, paraImagem, nomeDe, pinta, confere, numeros, abre,
+  return { svg, paraImagem, nomeDe, fila, pinta, confere, numeros, abre,
            conquistados: () => conquistados(numeros()) };
 })();

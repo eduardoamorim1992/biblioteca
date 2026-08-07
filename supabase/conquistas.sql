@@ -4,6 +4,12 @@
 -- Idempotente: pode rodar de novo sem quebrar. Roda DEPOIS de resenhas.sql e
 -- desafio.sql — ele lê books.rating e profiles.goal_books, que nascem lá.
 --
+-- MUDOU DEPOIS DA PRIMEIRA VERSÃO: se você já rodou este arquivo, rode de
+-- novo. A régua virou lista (conquistas_do_leitor) e ganhou uma porta pública
+-- (conquistas_de), para o perfil de quem se visita poder mostrar o que a
+-- pessoa ganhou. avatar_liberado continua existindo com a mesma assinatura,
+-- então o gatilho não muda.
+--
 -- ===========================================================================
 -- Por quê existe um arquivo de SQL para uma coisa de tela
 -- ===========================================================================
@@ -62,32 +68,30 @@ as $$
 $$;
 
 -- ===========================================================================
--- 2. A régua
+-- 2. A régua, que é uma lista
 -- ===========================================================================
 --
--- Devolve true quando o dono tem direito ao avatar pedido. Duas passagens
--- livres antes da conta: valor vazio (volta a ser a inicial do nome) e valor
--- que não é do catálogo — imagem hospedada é outro assunto, e quem decide
--- sobre ela não é esta função.
-create or replace function avatar_liberado(p_owner uuid, p_avatar text)
-returns boolean
+-- Devolve tudo que a conta já ganhou, de uma vez. A primeira versão respondia
+-- sobre um avatar por chamada, e isso servia enquanto a única pergunta era
+-- "posso gravar este?" — uma vez por troca de rosto.
+--
+-- Não serve mais. O perfil de quem se visita mostra as conquistas da pessoa,
+-- e perguntar dezesseis vezes seria refazer as nove contagens dezesseis
+-- vezes: cento e quarenta e quatro varreduras para desenhar uma fileira de
+-- bolinhas. Contando uma vez e comparando dezesseis, é uma.
+--
+-- Os três primeiros são de graça, e por isso já entram na lista: escolher um
+-- rosto não pode ser prêmio de ninguém — quem chegou hoje também tem cara.
+create or replace function conquistas_do_leitor(p_owner uuid)
+returns text[]
 language plpgsql
 stable security definer set search_path = public
 as $$
 declare
-  v_id   text;
   v_meta smallint;
   n      record;
+  r      text[] := array['leitor', 'marcador', 'pilha'];
 begin
-  if p_avatar is null or p_avatar = '' then return true; end if;
-  if left(p_avatar, 3) <> 'av:' then return true; end if;
-
-  v_id := substr(p_avatar, 4);
-
-  -- Os três de graça. Existem porque escolher um rosto não pode ser prêmio de
-  -- ninguém: quem chegou hoje também tem cara.
-  if v_id in ('leitor', 'marcador', 'pilha') then return true; end if;
-
   select
     coalesce((select sum(s.pages)   from sessions s where s.owner = p_owner), 0) as paginas,
     coalesce((select sum(s.minutes) from sessions s where s.owner = p_owner), 0) as minutos,
@@ -104,24 +108,60 @@ begin
 
   select p.goal_books into v_meta from profiles p where p.id = p_owner;
 
-  return case v_id
-    when 'chama'     then n.streak    >= 7
-    when 'lua'       then n.streak    >= 30
-    when 'ampulheta' then n.minutos   >= 600
-    when 'lampiao'   then n.minutos   >= 3000
-    when 'mil'       then n.paginas   >= 1000
-    when 'dezmil'    then n.paginas   >= 10000
-    when 'torre'     then n.livros    >= 5
-    when 'coluna'    then n.livros    >= 25
-    when 'pena'      then n.notas     >= 10
-    when 'aspas'     then n.citacoes  >= 25
-    when 'estrela'   then n.avaliados >= 5
-    when 'elo'       then n.seguindo  >= 5
-    -- A meta é escolhida, então a conquista só existe para quem escolheu.
-    when 'coroa'     then v_meta is not null and n.livros_ano >= v_meta
-    else false
-  end;
+  if n.streak    >= 7     then r := r || 'chama';     end if;
+  if n.streak    >= 30    then r := r || 'lua';       end if;
+  if n.minutos   >= 600   then r := r || 'ampulheta'; end if;
+  if n.minutos   >= 3000  then r := r || 'lampiao';   end if;
+  if n.paginas   >= 1000  then r := r || 'mil';       end if;
+  if n.paginas   >= 10000 then r := r || 'dezmil';    end if;
+  if n.livros    >= 5     then r := r || 'torre';     end if;
+  if n.livros    >= 25    then r := r || 'coluna';    end if;
+  if n.notas     >= 10    then r := r || 'pena';      end if;
+  if n.citacoes  >= 25    then r := r || 'aspas';     end if;
+  if n.avaliados >= 5     then r := r || 'estrela';   end if;
+  if n.seguindo  >= 5     then r := r || 'elo';       end if;
+  -- A meta é escolhida, então a conquista só existe para quem escolheu.
+  if v_meta is not null and n.livros_ano >= v_meta then r := r || 'coroa'; end if;
+
+  return r;
 end;
+$$;
+
+-- O portão continua fazendo a mesma pergunta, com a mesma assinatura — o
+-- gatilho lá embaixo não sabe que nada mudou. Duas passagens livres antes da
+-- conta: valor vazio (volta a ser a inicial do nome) e valor que não é do
+-- catálogo — imagem hospedada é outro assunto, e quem decide sobre ela não é
+-- esta função.
+create or replace function avatar_liberado(p_owner uuid, p_avatar text)
+returns boolean
+language sql
+stable security definer set search_path = public
+as $$
+  select case
+    when p_avatar is null or p_avatar = ''  then true
+    when left(p_avatar, 3) <> 'av:'         then true
+    else substr(p_avatar, 4) = any (conquistas_do_leitor(p_owner))
+  end;
+$$;
+
+-- ===========================================================================
+-- 2b. A porta pública
+-- ===========================================================================
+--
+-- Conquista que só o dono vê é meia conquista. Esta é a versão de fora: pelo
+-- @, e só de perfil público, pela mesma fronteira que reader_card() aplica.
+--
+-- Perfil privado e @ inexistente devolvem nada — e devolvem a MESMA coisa, de
+-- propósito. Distinguir "não existe" de "existe e é privado" transformaria
+-- esta função num detector de contas privadas.
+create or replace function conquistas_de(p_username citext)
+returns text[]
+language sql
+stable security definer set search_path = public
+as $$
+  select conquistas_do_leitor(p.id)
+  from profiles p
+  where p.username = p_username and p.is_private = false;
 $$;
 
 -- ===========================================================================

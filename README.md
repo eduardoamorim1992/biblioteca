@@ -20,8 +20,9 @@ O tempo é medido por relógio absoluto e o estado fica salvo: bloquear a tela, 
 
 **Leitores** — busca, ranking, feed e perfil. Tocar no nome de alguém abre o
 perfil, e o perfil abre a estante: o que a pessoa está lendo, o que já leu, o
-que quer ler e as notas que deu. É o que faz seguir alguém significar algo —
-antes disso, seguir um leitor levava a três números e ponto.
+que quer ler e as notas que deu, além das conquistas que ela ganhou. É o que
+faz seguir alguém significar algo — antes disso, seguir um leitor levava a
+três números e ponto.
 
 **Conquistas** — dezesseis avatares desenhados no próprio app, três livres e
 treze abertos por leitura: sequência de dias, horas, páginas, livros

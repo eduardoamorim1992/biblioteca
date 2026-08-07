@@ -223,6 +223,7 @@ const Social = (() => {
         <div class="perfil-num"><b>${p.books_year}</b><span>livros no ano</span></div>
         <div class="perfil-num"><b>${p.streak}</b><span>dias seguidos</span></div>
       </div>
+      <div id="perfilConquistas"></div>
       <p class="dlg-note">Lendo por aqui desde ${desde.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}.</p>
       <div id="perfilEstante"></div>
       ${Supa.user && p.user_id === Supa.user.id
@@ -231,7 +232,26 @@ const Social = (() => {
            <p class="dlg-note" style="margin-top:8px">Gera uma imagem com seus números do ano e seu @.</p>`
         : ""}`;
 
+    carregaConquistas(p.username, meu);
     carregaEstante(p.user_id, meu);
+  }
+
+  /** As conquistas de quem se visita. Enfeite em cima de enfeite: se a função
+      ainda não foi aplicada no banco, ou a rede caiu, a fileira simplesmente
+      não aparece. Ninguém precisa ler um erro para saber quantas medalhas o
+      outro tem. */
+  async function carregaConquistas(username, marca) {
+    if (typeof Avatares === "undefined") return;
+    let ids;
+    try {
+      ids = await Supa.conquistasDe(username);
+    } catch (e) {
+      console.warn("conquistas do perfil:", e.message);
+      return;
+    }
+    if (marca !== ultimoPerfil) return;
+    const alvo = $("perfilConquistas");
+    if (alvo) alvo.innerHTML = Avatares.fila(ids);
   }
 
   /* ------------------------------------------- a estante de quem se visita
@@ -248,7 +268,11 @@ const Social = (() => {
   const CHIP_ESTANTE   = { lendo: "lendo", lido: "lido", fila: "quero ler", abandonado: "abandonado" };
   const ORDEM_ESTANTE  = ["lendo", "lido", "fila", "abandonado"];
 
-  let estanteVista = null;         // { livros, filtro } do perfil aberto agora
+  // Teto do que cabe no diálogo. Quem tem mais livros do que isto não é
+  // atendido pior — é avisado, que é a diferença entre limite e mentira.
+  const TETO_ESTANTE = 200;
+
+  let estanteVista = null;    // { livros, filtro, cortou } do perfil aberto agora
 
   async function carregaEstante(userId, marca) {
     const alvo = $("perfilEstante");
@@ -257,7 +281,7 @@ const Social = (() => {
 
     let livros;
     try {
-      livros = await Supa.estanteDe(userId);
+      livros = await Supa.estanteDe(userId, TETO_ESTANTE);
     } catch (e) {
       if (marca !== ultimoPerfil) return;
       $("perfilEstante").innerHTML =
@@ -266,7 +290,11 @@ const Social = (() => {
       return;
     }
     if (marca !== ultimoPerfil) return;      // já é outro perfil na tela
-    estanteVista = { livros, filtro: "todos" };
+
+    // Veio um a mais do que cabe: existe pelo menos um 201º, e as contagens
+    // das abas passam a ser das duzentas, não da estante.
+    const cortou = livros.length > TETO_ESTANTE;
+    estanteVista = { livros: cortou ? livros.slice(0, TETO_ESTANTE) : livros, filtro: "todos", cortou };
     pintaEstante();
   }
 
@@ -301,7 +329,7 @@ const Social = (() => {
   function pintaEstante() {
     const alvo = $("perfilEstante");
     if (!alvo || !estanteVista) return;
-    const { livros, filtro } = estanteVista;
+    const { livros, filtro, cortou } = estanteVista;
 
     if (!livros.length) {
       alvo.innerHTML = `<div class="obra-secao">Estante</div>
@@ -310,7 +338,8 @@ const Social = (() => {
     }
 
     const conta = s => livros.filter(l => l.status === s).length;
-    const abas = [["todos", `Todos ${livros.length}`]]
+    // "Todos 200" numa estante de 312 seria número errado com cara de certo.
+    const abas = [["todos", cortou ? "Todos" : `Todos ${livros.length}`]]
       .concat(ORDEM_ESTANTE.filter(conta).map(s => [s, `${ROTULO_ESTANTE[s]} ${conta(s)}`]));
 
     const lista = (filtro === "todos" ? livros : livros.filter(l => l.status === filtro))
@@ -326,7 +355,9 @@ const Social = (() => {
                   data-est-filtro="${v}" aria-pressed="${v === filtro}">${esc(rotulo)}</button>`).join("")}
         </div>
       </div>
-      <div class="est-lista">${lista.map(l => livroDaEstante(l, filtro === "todos")).join("")}</div>`;
+      <div class="est-lista">${lista.map(l => livroDaEstante(l, filtro === "todos")).join("")}</div>
+      ${cortou ? `<p class="dlg-note" style="margin-top:8px">Mostrando os ${TETO_ESTANTE}
+        livros mais recentes — a estante é maior, e as contagens acima são só destes.</p>` : ""}`;
   }
 
   /** Desafio anual no perfil de quem se visita. Sem meta, nada aparece: o app

@@ -280,19 +280,34 @@ const Supa = (() => {
       })}`, { method: "DELETE" });
     },
 
+    /** Conquistas de um leitor, pelo @. A lista é de ids; o desenho é do
+        cliente, que já tem o catálogo — o servidor manda o veredito, não a
+        figura.
+
+        Perfil privado e @ inexistente devolvem a mesma coisa: nada. É a
+        função que decide isso, não este cliente. */
+    async conquistasDe(username) {
+      const ids = await raw("/rest/v1/rpc/conquistas_de", {
+        method: "POST", body: { p_username: username },
+        token: session && session.access_token
+      });
+      return ids || [];
+    },
+
     /** A estante de um leitor. Nenhuma função nova: o RLS de books já decide
         quem pode ler o quê — perfil público abre a estante, perfil privado
         devolve lista vazia mesmo para quem o segue.
 
-        Uma ida só, sem paginar: uma estante de leitor cabe em duzentas linhas
-        e o diálogo mostra tudo de uma vez. Paginar aqui custaria mais código
-        do que trazer o que não vai ser rolado. */
+        Pede um a mais do que vai mostrar. É o jeito barato de saber que a
+        estante não coube: se voltaram 201, existe um 201º, e a tela pode
+        dizer isso em vez de apresentar 200 como se fossem todos. Limite
+        invisível é pior que limite — o app mente sem saber. */
     estanteDe(userId, limit = 200) {
       return auth(`/rest/v1/books?${qs({
         select: "id,title,author,cover_url,pages,current_page,status,rating,year,ol_key",
         owner: "eq." + userId,
         order: "created_at.desc",
-        limit
+        limit: limit + 1
       })}`);
     },
 

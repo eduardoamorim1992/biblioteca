@@ -54,6 +54,8 @@ Funções:
 - `reader_streak(uuid)` — sequência de dias consecutivos, por ilhas de datas
 - `reader_best_streak(uuid)` — a maior sequência já feita, que é a régua das
   conquistas: feriado não tira medalha de quem já leu 40 dias seguidos
+- `conquistas_do_leitor(uuid)` — tudo que a conta ganhou, numa passagem só
+- `conquistas_de(username)` — a mesma lista pelo @, e só de perfil público
 - `avatar_liberado(uuid, text)` — o dono tem direito a este avatar?
 - `leaderboard(período, métrica, limite)` — ranking por páginas, livros ou sequência; semana, mês, ano ou geral
 - `reader_card(username)` — o cartão do perfil público

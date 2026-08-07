@@ -472,6 +472,11 @@ dialog::backdrop{background:color-mix(in srgb,#161826 62%,transparent);backdrop-
    Linha estreita, capa pequena: é lista de acervo, não a estante de
    trabalho. Quem quiser detalhe abre a página da obra. */
 dialog#perfilDlg{width:min(520px,94vw)}
+/* Fileira de conquistas no perfil de quem se visita. Discos pequenos, sem
+   rótulo — o nome e a régua vão no title, para quem quiser saber. */
+.conq-fila{display:flex;flex-wrap:wrap;gap:7px}
+.conq{width:30px;height:30px;flex:none;cursor:help}
+.conq .av-svg{width:100%;height:100%;display:block;border-radius:50%}
 .est-cab{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:6px 0 4px}
 .est-cab .seg{flex:1;min-width:0;overflow-x:auto;scrollbar-width:none}
 .est-cab .seg::-webkit-scrollbar{display:none}
@@ -2377,7 +2382,7 @@ function esc(s) {
 }
 /* Versão visível na tela de entrada. Sem isso não há como saber, à distância,
    se o navegador está rodando o código publicado ou uma sobra de cache. */
-const APP_VERSION = "v25";
+const APP_VERSION = "v26";
 document.getElementById("authVersao").textContent = APP_VERSION;
 
 /* Nada de falhar calado. Um erro não tratado costuma virar "cliquei e não
