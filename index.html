@@ -642,6 +642,15 @@ dialog#livroDlg{width:min(520px,94vw)}
 .fato-livro .thumb span{font-size:15px}
 .fato-livro .t{font-size:13.5px;font-weight:500;line-height:1.3}
 .fato-livro .a{font-size:11.5px;color:var(--muted);margin-top:2px}
+/* Conquista no feed: mesma caixa do livro, com a medalha no lugar da capa.
+   A régua embaixo do nome é o que faz quem lê querer a sua. */
+.fato-conquista{display:flex;gap:13px;align-items:center;margin-top:11px;padding:11px;
+  border-radius:var(--radius);background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent-line)}
+.conq-grande{width:44px;height:44px;flex:none;display:grid;place-items:center;font-size:22px;color:var(--accent)}
+.conq-grande .av-svg{width:100%;height:100%;display:block;border-radius:50%}
+.fato-conquista .t{font-size:14px;font-weight:500;line-height:1.3}
+.fato-conquista .a{font-size:11.5px;color:var(--muted);margin-top:2px}
+
 .fato-citacao{
   margin-top:11px;padding:0 0 0 14px;border-left:2px solid var(--accent-line);
   font-size:14px;line-height:1.6;white-space:pre-wrap;color:var(--text-2);
@@ -2399,7 +2408,7 @@ function esc(s) {
 }
 /* Versão visível na tela de entrada. Sem isso não há como saber, à distância,
    se o navegador está rodando o código publicado ou uma sobra de cache. */
-const APP_VERSION = "v27";
+const APP_VERSION = "v28";
 document.getElementById("authVersao").textContent = APP_VERSION;
 
 /* Nada de falhar calado. Um erro não tratado costuma virar "cliquei e não

@@ -167,6 +167,13 @@ const Avatares = (() => {
 
   const nomeDe = avatarUrl => (PORID.get(idDaChave(avatarUrl)) || {}).nome || null;
 
+  /** Nome e régua de uma conquista, pelo id. Para o feed, que recebe o id na
+      atividade e precisa dizer o que aquilo significa. */
+  const info = id => {
+    const a = PORID.get(id);
+    return a ? { id: a.id, nome: a.nome, como: a.como, chave: chaveDe(a.id) } : null;
+  };
+
   /** A fileira de conquistas de alguém, para o perfil de quem se visita.
       Só o que a pessoa ganhou — quem visita não precisa da lista de tarefas
       alheia, e mostrar o que falta ao outro é apontar, não informar.
@@ -242,9 +249,12 @@ const Avatares = (() => {
 
     const novas = agora.filter(id => !antes.includes(id));
     // renderAll() chama isto a cada salvamento; sem esta saída, todo registro
-    // de leitura reescreveria a mesma lista no localStorage à toa.
-    if (!novas.length && agora.length === antes.length) return;
+    // de leitura reescreveria a mesma lista no localStorage à toa. A fila de
+    // publicação, essa sim, é tentada sempre: ela existe para o caso de a
+    // primeira tentativa ter falhado.
+    if (!novas.length && agora.length === antes.length) return esvaziaFila();
     guarda();
+    enfileira(novas);
     pinta();                       // o contador do painel da conta acabou de mudar
     if (!novas.length || typeof toast !== "function") return;
 
@@ -256,6 +266,57 @@ const Avatares = (() => {
       : `${novas.length} conquistas novas: ${nomes.join(", ")}.`,
       { texto: "escolher rosto", fn: abre });
     if (dlg && dlg.open) desenhaGrade();
+  }
+
+  /* ------------------------------------------------ conquista no feed
+     Publicar é o terceiro lugar em que a recompensa sai do dono — e o único
+     em que a descoberta é passiva: quem abre o feed e vê "fulano conquistou a
+     Chama" fica sabendo, no mesmo gesto, que conquistas existem.
+
+     Fila porque a publicação pode falhar. A pessoa ganha a Chama no ônibus,
+     sem sinal, e o aviso aparece do mesmo jeito — o que não pode é a notícia
+     se perder junto com a conexão. O que entra aqui sai na próxima
+     conferência, e o banco recusa a repetida com 23505. */
+  const FILA = "biblioteca.conquistas.fila";
+
+  const leFila = () => {
+    try { const f = JSON.parse(localStorage.getItem(FILA) || "[]"); return Array.isArray(f) ? f : []; }
+    catch (e) { return []; }
+  };
+  const gravaFila = f => {
+    try { f.length ? localStorage.setItem(FILA, JSON.stringify(f)) : localStorage.removeItem(FILA); }
+    catch (e) { }
+  };
+
+  function enfileira(ids) {
+    if (!ids.length) return;
+    const f = leFila();
+    for (const id of ids) if (!f.includes(id)) f.push(id);
+    gravaFila(f);
+    esvaziaFila();
+  }
+
+  let esvaziando = false;
+
+  async function esvaziaFila() {
+    if (esvaziando || typeof Supa === "undefined" || !Supa.user) return;
+    const f = leFila();
+    if (!f.length) return;
+    esvaziando = true;
+    try {
+      for (const id of f.slice()) {
+        const a = PORID.get(id);
+        if (!a) { gravaFila(leFila().filter(x => x !== id)); continue; }
+        try {
+          await Supa.publicaConquista(id, a.nome);
+        } catch (e) {
+          // 23505 = já publicada. Estado desejado já é o do banco, então sai
+          // da fila igual. Qualquer outro erro fica para a próxima volta.
+          if (e.code !== "23505") continue;
+        }
+        gravaFila(leFila().filter(x => x !== id));
+      }
+    } finally { esvaziando = false; }
   }
 
   /* ----------------------------------------------------------- a escolha */
@@ -404,6 +465,6 @@ const Avatares = (() => {
     if (cel) escolhe(cel.dataset.avId);
   });
 
-  return { svg, paraImagem, nomeDe, fila, pinta, confere, numeros, abre,
+  return { svg, paraImagem, nomeDe, info, fila, pinta, confere, numeros, abre,
            conquistados: () => conquistados(numeros()) };
 })();

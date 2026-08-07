@@ -280,6 +280,19 @@ const Supa = (() => {
       })}`, { method: "DELETE" });
     },
 
+    /** Anuncia uma conquista no feed. O `nome` viaja junto porque a atividade
+        precisa continuar legível para um navegador que não conheça este id —
+        versão velha em cache, catálogo novo no ar.
+
+        O banco confere se a conquista é verdade (supabase/conquista-no-feed.sql)
+        e recusa a segunda publicação da mesma, com 23505. */
+    publicaConquista(id, nome) {
+      return auth("/rest/v1/activities", {
+        method: "POST",
+        body: { owner: session.user.id, kind: "conquista", payload: { id, nome } }
+      });
+    },
+
     /** Conquistas de um leitor, pelo @. A lista é de ids; o desenho é do
         cliente, que já tem o catálogo — o servidor manda o veredito, não a
         figura.

@@ -24,9 +24,10 @@ Perfil marcado como privado sai do ranking e do feed.
    gatilho que publicava importação como se fosse notícia e cria a função que
    monta a linha do tempo. Sem este passo o app avisa na tela, em vez de quebrar.
 4. Rode os complementos, **nesta ordem**: `privacidade.sql`, `resenhas.sql`,
-   `notificacoes.sql`, `livro.sql`, `sugestoes.sql`, `desafio.sql` e, por
-   último, `conquistas.sql` — este lê `books.rating` e `profiles.goal_books`,
-   criados nos dois anteriores, e recusa rodar antes deles.
+   `notificacoes.sql`, `livro.sql`, `sugestoes.sql`, `desafio.sql`,
+   `conquistas.sql` — este lê `books.rating` e `profiles.goal_books`, criados
+   nos dois anteriores, e recusa rodar antes deles — e `conquista-no-feed.sql`,
+   que depende do `conquistas.sql`.
 5. Em **Authentication → Providers**, deixe *Email* ligado. Google é opcional.
 6. Em **Project Settings → API**, copie a **Project URL** e a chave **anon public**.
 

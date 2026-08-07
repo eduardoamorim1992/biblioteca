@@ -466,8 +466,28 @@ const Social = (() => {
                      ? `guardou uma citação${f.book_title ? ` de <b>${esc(f.book_title)}</b>` : ""}`
                      : `anotou algo${f.book_title ? ` sobre <b>${esc(f.book_title)}</b>` : ""}`,
     progress: f => `avançou em <b>${esc(f.book_title || tituloDoPayload(f))}</b>`,
-    review:   f => `avaliou <b>${esc(f.book_title || tituloDoPayload(f))}</b>`
+    review:   f => `avaliou <b>${esc(f.book_title || tituloDoPayload(f))}</b>`,
+    // Sem id no payload não há o que nomear. O gatilho do banco não deixa uma
+    // linha dessas existir, mas "conquistou uma conquista" seria um jeito
+    // bobo de descobrir que ele falhou.
+    conquista: f => {
+      const c = conquistaDoFato(f);
+      return c ? `conquistou <b>${esc(c.nome)}</b>` : "ganhou uma conquista";
+    }
   };
+
+  /* O catálogo local vem primeiro: ele está sempre certo sobre o nome atual.
+     O payload é a rede — a notícia continua legível num navegador que não
+     conheça este id, seja porque está com versão velha em cache, seja porque
+     o avatar saiu do catálogo depois de alguém já tê-lo ganhado. */
+  function conquistaDoFato(f) {
+    const id = f.payload && f.payload.id;
+    const local = (id && typeof Avatares !== "undefined") ? Avatares.info(id) : null;
+    if (local) return local;
+    if (!id) return null;
+    return { id, nome: (f.payload && f.payload.nome) || "uma conquista", como: null, chave: null };
+  }
+
 
   /* A nota vem da linha do livro; se o livro foi apagado, sobra a que viajou
      no payload no momento da publicação. */
@@ -490,7 +510,7 @@ const Social = (() => {
 
   function fato(f) {
     const autor = { id: f.owner, username: f.username, display_name: f.display_name, avatar_url: f.avatar_url };
-    const temLivro = f.kind !== "note" && (f.book_title || f.payload);
+    const temLivro = f.kind !== "note" && f.kind !== "conquista" && (f.book_title || f.payload);
     const abertos = comentariosAbertos.has(f.id);
     return `
     <article class="fato" data-fato="${f.id}">
@@ -517,6 +537,8 @@ const Social = (() => {
           </div>
         </div>` : ""}
 
+      ${f.kind === "conquista" ? cartaoConquista(f) : ""}
+
       ${f.kind === "review" && f.book_review
         ? `<div class="fato-resenha">${esc(f.book_review)}</div>` : ""}
 
@@ -534,6 +556,23 @@ const Social = (() => {
 
       <div class="coments" data-lista="${f.id}" ${abertos ? "" : "hidden"}></div>
     </article>`;
+  }
+
+  /** O bloco da conquista no feed. Mostra a régua junto com a medalha: sem
+      ela, "conquistou a Chama" não diz o que a pessoa fez para ganhá-la — e
+      é justamente isso que faz quem lê querer a sua. */
+  function cartaoConquista(f) {
+    const c = conquistaDoFato(f);
+    if (!c) return "";
+    const disco = c.chave && typeof Avatares !== "undefined" ? Avatares.svg(c.chave) : "";
+    return `
+      <div class="fato-conquista">
+        <span class="conq-grande">${disco || "★"}</span>
+        <div style="min-width:0">
+          <div class="t">${esc(c.nome)}</div>
+          ${c.como ? `<div class="a">${esc(c.como)}</div>` : ""}
+        </div>
+      </div>`;
   }
 
   async function carregaFeed({ mais = false } = {}) {
@@ -863,6 +902,10 @@ const Social = (() => {
 
   // "seu registro de Torto Arado" lê melhor do que "sua atividade #4f2a".
   function sobreOQue(n) {
+    // Conquista não tem livro, então cairia em "algo que você publicou" — que
+    // é verdade e não diz nada. O nome não vem na notificação, mas "sua
+    // conquista" já situa a pessoa.
+    if (n.activity_kind === "conquista") return "sua conquista";
     if (n.book_title) {
       const q = n.activity_kind === "review" ? "sua resenha de"
               : n.activity_kind === "finished" ? "quando você terminou"
