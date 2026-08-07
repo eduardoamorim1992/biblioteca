@@ -336,6 +336,11 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;padding-right:0}
   opacity:0;pointer-events:none;transition:opacity .18s,transform .18s;box-shadow:var(--shadow-up);max-width:88vw;text-align:center;
 }
 #toast.on{opacity:1;transform:translate(-50%,0)}
+/* Aviso com ação: só ele volta a receber clique, e diz isso com o cursor e
+   uma borda de acento. Aviso comum continua atravessável, que é o certo —
+   ele não pode roubar o toque de quem estava mirando o que está embaixo. */
+#toast.tocavel{pointer-events:auto;cursor:pointer;box-shadow:var(--shadow-up),inset 0 0 0 1px var(--accent)}
+#toast .toast-acao{color:var(--accent);font-weight:500;margin-left:9px;white-space:nowrap}
 
 /* ── tela de entrada ──────────────────────────────────────────────── */
 .auth-screen{
@@ -1596,7 +1601,14 @@ function renderPrimeiroDia() {
     { feito: state.sessions.length > 0, texto: "Registre uma leitura",
       dica: "Quantas páginas você leu hoje", ir: "hoje" },
     { feito: sigo > 0, texto: "Siga um leitor",
-      dica: "É o que faz o feed ter o que mostrar amanhã", ir: "leitores" }
+      dica: "É o que faz o feed ter o que mostrar amanhã", ir: "leitores" },
+    /* Quarto passo porque a porta do sistema de conquistas estava escondida
+       dentro do painel da conta — um lugar que ninguém abre por curiosidade.
+       Este cartão é onde há olhos no primeiro dia. */
+    { feito: !!(window.MEU_PERFIL && window.MEU_PERFIL.avatar_url),
+      texto: "Escolha seu rosto",
+      dica: "Três avatares são livres; os outros treze se ganham lendo",
+      abrir: "avatar" }
   ];
 
   // Feito tudo, o cartão não tem mais o que dizer.
@@ -1607,7 +1619,9 @@ function renderPrimeiroDia() {
     <li class="pd-passo" data-feito="${p.feito ? 1 : 0}">
       <span class="pd-marca">${p.feito ? "✓" : ""}</span>
       <span class="pd-texto">${p.texto}<span>${p.dica}</span></span>
-      ${p.feito ? "" : `<button class="btn sm" data-pd-ir="${p.ir}">Ir</button>`}
+      ${p.feito ? "" : p.abrir
+        ? `<button class="btn sm" data-pd-abrir="${p.abrir}">Ir</button>`
+        : `<button class="btn sm" data-pd-ir="${p.ir}">Ir</button>`}
     </li>`).join("");
 }
 
@@ -1618,7 +1632,10 @@ document.getElementById("pdFechar").addEventListener("click", () => {
 
 document.getElementById("pdPassos").addEventListener("click", e => {
   const b = e.target.closest("[data-pd-ir]");
-  if (b) openView(b.dataset.pdIr);
+  if (b) return openView(b.dataset.pdIr);
+  // Nem todo passo é uma aba: o do rosto abre um diálogo.
+  const d = e.target.closest("[data-pd-abrir]");
+  if (d && d.dataset.pdAbrir === "avatar" && typeof Avatares !== "undefined") Avatares.abre();
 });
 
 /* =======================================================================
@@ -2382,7 +2399,7 @@ function esc(s) {
 }
 /* Versão visível na tela de entrada. Sem isso não há como saber, à distância,
    se o navegador está rodando o código publicado ou uma sobra de cache. */
-const APP_VERSION = "v26";
+const APP_VERSION = "v27";
 document.getElementById("authVersao").textContent = APP_VERSION;
 
 /* Nada de falhar calado. Um erro não tratado costuma virar "cliquei e não
@@ -2406,13 +2423,33 @@ window.addEventListener("unhandledrejection", e => {
   toast("Algo falhou aqui dentro: " + m);
 });
 
-let toastTimer;
-function toast(msg) {
+/* Aviso. Com `acao` — { texto, fn } — ele vira botão e fica mais tempo na
+   tela: quem precisa reagir precisa de tempo para ler e mirar.
+
+   Existe porque o aviso de conquista era um beco sem saída. A pessoa lia
+   "avatar liberado" no melhor momento possível, o momento em que ela mais
+   quer clicar, e não havia para onde ir. */
+let toastTimer, toastAcao = null;
+function toast(msg, acao) {
   const el = document.getElementById("toast");
-  el.textContent = msg; el.classList.add("on");
+  toastAcao = acao || null;
+  el.textContent = msg;                       // texto, nunca HTML: aqui passa título de livro
+  if (acao) el.insertAdjacentHTML("beforeend", `<span class="toast-acao">${esc(acao.texto)}</span>`);
+  el.classList.toggle("tocavel", !!acao);
+  el.classList.add("on");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove("on"), 2600);
+  toastTimer = setTimeout(() => {
+    el.classList.remove("on", "tocavel");
+    toastAcao = null;                         // aviso que saiu não deixa clique para trás
+  }, acao ? 6000 : 2600);
 }
+document.getElementById("toast").addEventListener("click", () => {
+  const acao = toastAcao;
+  if (!acao) return;
+  toast("");                                  // some na hora: o clique já foi respondido
+  document.getElementById("toast").classList.remove("on");
+  acao.fn();
+});
 
 /* ---------- tema ---------- */
 function applyTheme() {

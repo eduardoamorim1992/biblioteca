@@ -249,9 +249,12 @@ const Avatares = (() => {
     if (!novas.length || typeof toast !== "function") return;
 
     const nomes = novas.map(id => PORID.get(id).nome);
+    // O aviso leva para a grade. É o único instante em que a pessoa quer
+    // clicar nisso, e até agora ele não levava a lugar nenhum.
     toast(novas.length === 1
       ? `Conquista: ${nomes[0]} — avatar liberado.`
-      : `${novas.length} conquistas novas: ${nomes.join(", ")}.`);
+      : `${novas.length} conquistas novas: ${nomes.join(", ")}.`,
+      { texto: "escolher rosto", fn: abre });
     if (dlg && dlg.open) desenhaGrade();
   }
 
@@ -355,6 +358,9 @@ const Avatares = (() => {
       window.MEU_PERFIL = p;
       pinta(p);
       desenhaGrade();
+      // O passo "escolha seu rosto" do primeiro dia acabou de ficar pronto —
+      // ou de deixar de estar. Sem isto ele só se corrigiria no próximo render.
+      if (typeof renderPrimeiroDia === "function") renderPrimeiroDia();
       aviso(`Agora você é ${a.nome}.`, "ok");
     } catch (e) {
       /* O banco recusa avatar não conquistado. Quando isso acontece com uma
@@ -376,6 +382,9 @@ const Avatares = (() => {
       window.MEU_PERFIL = p;
       pinta(p);
       desenhaGrade();
+      // O passo "escolha seu rosto" do primeiro dia acabou de ficar pronto —
+      // ou de deixar de estar. Sem isto ele só se corrigiria no próximo render.
+      if (typeof renderPrimeiroDia === "function") renderPrimeiroDia();
       aviso("Voltou para a sua inicial.", "ok");
     } catch (e) { aviso("Não consegui: " + e.message, "erro"); }
   }

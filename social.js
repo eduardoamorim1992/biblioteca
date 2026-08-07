@@ -232,7 +232,7 @@ const Social = (() => {
            <p class="dlg-note" style="margin-top:8px">Gera uma imagem com seus números do ano e seu @.</p>`
         : ""}`;
 
-    carregaConquistas(p.username, meu);
+    carregaConquistas(p.username, meu, Supa.user && p.user_id === Supa.user.id);
     carregaEstante(p.user_id, meu);
   }
 
@@ -240,7 +240,7 @@ const Social = (() => {
       ainda não foi aplicada no banco, ou a rede caiu, a fileira simplesmente
       não aparece. Ninguém precisa ler um erro para saber quantas medalhas o
       outro tem. */
-  async function carregaConquistas(username, marca) {
+  async function carregaConquistas(username, marca, souEu) {
     if (typeof Avatares === "undefined") return;
     let ids;
     try {
@@ -251,7 +251,15 @@ const Social = (() => {
     }
     if (marca !== ultimoPerfil) return;
     const alvo = $("perfilConquistas");
-    if (alvo) alvo.innerHTML = Avatares.fila(ids);
+    if (!alvo) return;
+    const fileira = Avatares.fila(ids);
+    // No próprio perfil, a fileira é também a porta: é olhando os rostos que
+    // se quer trocar de rosto. Sem conquista nenhuma o convite aparece igual,
+    // porque os três livres existem exatamente para esse momento.
+    alvo.innerHTML = fileira + (souEu
+      ? `<button type="button" class="quem-le" data-abre-avatares="1"
+                 style="margin-top:${fileira ? 9 : 0}px">Escolher meu rosto</button>`
+      : "");
   }
 
   /* ------------------------------------------- a estante de quem se visita
@@ -1058,6 +1066,8 @@ const Social = (() => {
 
     const denAtv = e.target.closest("[data-denunciar]");
     if (denAtv) return denuncia({ atividade: denAtv.dataset.denunciar });
+
+    if (e.target.closest("[data-abre-avatares]") && typeof Avatares !== "undefined") return Avatares.abre();
 
     const estFiltro = e.target.closest("[data-est-filtro]");
     if (estFiltro) {

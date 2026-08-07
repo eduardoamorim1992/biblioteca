@@ -35,6 +35,9 @@ Nenhum deles é imagem hospedada — são SVG de duas linhas, o que mantém a
 promessa de funcionar offline. E quem confere a conquista é o banco, não o
 navegador: `supabase/conquistas.sql` recusa avatar que a conta não ganhou.
 
+Quando uma conquista cai, o aviso na tela leva direto para a grade — e o
+avatar escolhido vai junto no cartão que você compartilha.
+
 ## Onde ficam os dados
 
 Em dois lugares ao mesmo tempo: no `localStorage` do navegador, para o app

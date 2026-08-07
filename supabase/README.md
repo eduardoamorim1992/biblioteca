@@ -77,6 +77,17 @@ O catálogo de avatares tem gêmeo em `avatares.js`. Acrescentar um lá sem
 acrescentar aqui faz a troca falhar com mensagem clara, que é o menos ruim dos
 desencontros: um avatar que aparece e some ao recarregar seria pior.
 
+Mesmo assim, o erro só apareceria para quem tentasse usar aquele avatar — o
+jeito mais lento possível de descobrir um problema. Antes de mexer no
+catálogo, e depois:
+
+```
+python supabase/confere-catalogo.py
+```
+
+Ele compara os dois arquivos e sai com 1 se discordarem. Só biblioteca padrão:
+conferência que exige instalar coisa antes é conferência que ninguém roda.
+
 ## Por que o feed não é uma consulta simples
 
 Montar a tela com PostgREST puro custaria cinco viagens: atividades, autores, curtidas, "fui eu que curti" e contagem de comentários. Em rede de celular isso é a diferença entre abrir e esperar. A função devolve tudo de uma vez.
